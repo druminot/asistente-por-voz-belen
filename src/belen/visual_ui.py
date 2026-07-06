@@ -88,6 +88,38 @@ class SiriStyleWindow:
         self._on_toggle_wakeword = on_toggle_wakeword
         self._on_quit = on_quit
 
+    def pulseTick_(self, _timer: object) -> None:
+        """Callback del NSTimer para animar el orbe. Llamado por AppKit."""
+        import math
+        import time as _time
+
+        if self._orbe_layer is None or not self._running:
+            return
+        if not hasattr(self, "_pulse_t0"):
+            self._pulse_t0 = _time.monotonic()
+        t = _time.monotonic() - self._pulse_t0
+        scale = 1.0 + 0.12 * (0.5 + 0.5 * math.sin(t * 3.5))
+
+        from Quartz import CATransform3D, CGColorCreateGenericRGB
+
+        transform = CATransform3D()
+        transform.m11 = scale
+        transform.m22 = scale
+        transform.m33 = 1.0
+        transform.m44 = 1.0
+        self._orbe_layer.setTransform_(transform)
+
+        if self._ring_layer is not None:
+            opacity = 0.15 + 0.35 * (0.5 + 0.5 * math.sin(t * 3.5 + 0.5))
+            self._ring_layer.setOpacity_(opacity)
+
+        if hasattr(self, "_pulse_state") and self._state != self._pulse_state:
+            self._pulse_state = self._state
+            color = CGColorCreateGenericRGB(*STATE_COLORS[self._state])
+            self._orbe_layer.setBackgroundColor_(color)
+            self._orbe_layer.setShadowColor_(color)
+            self._ring_layer.setBorderColor_(color)
+
     def start(self) -> None:
         """Arranca la ventana (bloqueante, en el main thread)."""
         if platform.system() != "Darwin":
@@ -105,12 +137,7 @@ class SiriStyleWindow:
             NSWindowStyleMaskNonactivatingPanel,
         )
         from Foundation import NSMakeRect
-        from Quartz import (
-            CABasicAnimation,
-            CALayer,
-            CGColorCreateGenericRGB,
-            kCAMediaTimingFunctionEaseInEaseOut,
-        )
+        from Quartz import CALayer, CGColorCreateGenericRGB
 
         self._app = NSApplication.sharedApplication()
         self._app.setActivationPolicy_(1)
@@ -229,23 +256,34 @@ class SiriStyleWindow:
         self._belen_text_field.setStringValue_("")
         container.addSubview_(self._belen_text_field)
 
-        # Animación de pulso
-        self._start_pulse_animation()
-
         # Mostrar ventana
         self._window.orderFrontRegardless()
         self._running = True
+
+        # Iniciar animación con NSTimer (más confiable que CABasicAnimation en pyobjc)
+        self._start_pulse_animation()
 
         # Run loop
         self._app.activateIgnoringOtherApps_(True)
         NSApp.run()
 
     def _start_pulse_animation(self) -> None:
-        """Inicia animación de pulso del orbe (opcional)."""
-        # La animación de pulso requiere Quartz.CoreAnimation que no está
-        # disponible en pyobjc. Por ahora, dejamos el orbe estático.
-        # El color cambia según el estado, lo cual ya da feedback visual.
-        pass
+        """Inicia animación de pulso del orbe con NSTimer.
+
+        Evita CABasicAnimation que está rota en pyobjc 12.2.1.
+        El método pulseTick_ modifica transform/opacity en cada tick.
+        """
+        import time as _time
+
+        from AppKit import NSTimer
+
+        self._pulse_t0 = _time.monotonic()
+        self._pulse_state = self._state
+
+        # 30 fps — suficiente para animación suave, liviano para la CPU
+        self._pulse_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.0 / 30.0, self, "pulseTick:", None, True
+        )
 
     def start_async(self) -> threading.Thread:
         """Arranca la ventana en un thread daemon."""
@@ -339,11 +377,28 @@ class SiriStyleWindow:
         self.show()
 
     def stop(self) -> None:
+        """Detiene la ventana y libera recursos."""
         from AppKit import NSApp
 
-        if self._app is not None:
-            NSApp.terminate_(None)
         self._running = False
+        if getattr(self, "_pulse_timer", None) is not None:
+            try:
+                self._pulse_timer.invalidate()
+            except Exception:
+                pass
+            self._pulse_timer = None
+        if self._window is not None:
+            try:
+                self._window.orderOut_(None)
+                self._window.close()
+            except Exception:
+                pass
+            self._window = None
+        if self._app is not None:
+            try:
+                NSApp.terminate_(None)
+            except Exception:
+                pass
 
 
 class FallbackVisualUI:
