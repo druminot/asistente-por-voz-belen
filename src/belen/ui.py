@@ -215,15 +215,23 @@ class ConsoleUI:
 
 
 def get_ui() -> Any:
-    """Devuelve FloatingUI en macOS (si rumps está), sino ConsoleUI."""
+    """Devuelve FloatingUI en macOS (si rumps está y estamos en main thread), sino ConsoleUI.
+
+    rumps requiere ejecutarse en el main thread de macOS para acceder a NSStatusBar.
+    Si no estamos en main thread (ej: dentro de un test o en background), usa ConsoleUI.
+    """
     import platform
+    import threading
 
     if platform.system() != "Darwin":
         return ConsoleUI()
 
     try:
         import rumps  # noqa: F401
-
-        return FloatingUI()
     except ImportError:
         return ConsoleUI()
+
+    if threading.current_thread() is not threading.main_thread():
+        return ConsoleUI()
+
+    return FloatingUI()

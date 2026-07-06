@@ -64,7 +64,7 @@ class BelenPipeline:
         self.tts = tts or TTSManager()
         self.project_selector = project_selector or ProjectSelector()
         self.status = status or StatusDisplay()
-        self.ui = ui or (FloatingUI() if self.settings.belen_floating_ui else ConsoleUI())
+        self.ui = ui or ConsoleUI()
         self.wakeword = wakeword or WakeWordDetector()
         self._hotkey_listener: HotkeyListener | None = None
         self._is_running = False
@@ -117,9 +117,6 @@ class BelenPipeline:
         self._hotkey_listener.on_press(self._handle_hotkey_press)
         self._hotkey_listener.on_release(self._handle_hotkey_release)
         self._hotkey_listener.start()
-
-        if isinstance(self.ui, FloatingUI):
-            self.ui.start_async()
 
     def stop(self) -> None:
         if not self._is_running:
