@@ -16,7 +16,7 @@ def test_default_settings():
     assert s.belen_hotkey_mode == HotkeyMode.PUSH_TO_TALK
     assert s.belen_wakeword_enabled is True
     assert s.belen_wakeword == "belen"
-    assert s.belen_stt_engine == STTEngine.VIBEVOICE_ASR
+    assert s.belen_stt_engine == STTEngine.FASTER_WHISPER
     assert s.belen_tts_engine == TTSEngine.VIBEVOICE_REALTIME
     assert s.belen_sample_rate == 16000
     assert s.belen_stt_lang == "es"

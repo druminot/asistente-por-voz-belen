@@ -61,14 +61,29 @@ def start(
     use_floating_ui = (
         s.belen_floating_ui and not no_ui and platform.system() == "Darwin"
     )
+
+    # Banner grande con instrucciones
+    console.print()
+    console.print(Panel.fit(
+        f"[bold green]🎙️  Belen v{__version__}  🎙️[/bold green]\n\n"
+        f"[bold]¿Qué hago?[/bold]\n"
+        f"  1. Apretá y mantené [cyan]{s.belen_hotkey}[/cyan]\n"
+        f"  2. Hablá mientras lo apretás\n"
+        f"  3. Soltá la hotkey — Belen escucha, piensa y te responde\n\n"
+        f"[bold]Atajos alternativos:[/bold]\n"
+        f"  • Decí [cyan]\"Belen\"[/cyan] (wake word) y empezá a hablar\n"
+        f"  • [cyan]belen ask \"pregunta\"[/cyan] para texto sin audio",
+        title="Bienvenido a Belen",
+        border_style="green",
+    ))
     console.print(
         Panel.fit(
-            f"[bold green]Belen v{__version__}[/bold green]\n"
             f"Hotkey: [cyan]{s.belen_hotkey}[/cyan] ({s.belen_hotkey_mode.value})\n"
             f"Wake word: [{'green' if s.belen_wakeword_enabled and not no_wakeword else 'red'}]"
             f"{'on' if s.belen_wakeword_enabled and not no_wakeword else 'off'}[/] "
             f"({s.belen_wakeword!r})\n"
-            f"STT: [cyan]{s.belen_stt_engine.value}[/cyan]\n"
+            f"STT: [cyan]{s.belen_stt_engine.value}[/cyan] "
+            f"({s.belen_whisper_model} si faster-whisper)\n"
             f"TTS: [cyan]{s.belen_tts_engine.value}[/cyan]\n"
             f"Cerebro: [cyan]opencode[/cyan] ({s.opencode_model})\n"
             f"UI flotante: [{'green' if use_floating_ui else 'red'}]"
@@ -77,6 +92,21 @@ def start(
             border_style="green",
         )
     )
+
+    # Aviso sobre permisos si estamos en macOS
+    if platform.system() == "Darwin" and not no_ui:
+        console.print()
+        console.print(Panel(
+            "[bold]Si la hotkey no funciona o no escuchás nada:[/bold]\n\n"
+            "1. Corré [cyan]belen setup[/cyan] para configurar permisos\n"
+            "2. O manualmente: System Settings → Privacy & Security\n"
+            "   • Microphone → agregar Terminal\n"
+            "   • Accessibility → agregar Terminal\n"
+            "3. Test rápido: [cyan]belen test-mic[/cyan]\n"
+            "4. Después de cambiar permisos, REINICIÁ la Terminal",
+            title="⚠ Permisos de macOS",
+            border_style="yellow",
+        ))
     if project is not None:
         console.print(f"[bold]Proyecto inicial:[/bold] [cyan]{project}[/cyan]")
     console.print()
@@ -320,6 +350,48 @@ def ask(
 
     console.print(Panel(response.text, title="Respuesta", border_style="green"))
     console.print(f"[dim]Duración: {response.duration_seconds:.2f}s[/dim]")
+
+
+@app.command()
+def setup() -> None:
+    """Asistente interactivo para configurar permisos de macOS (mic + accesibilidad)."""
+    from belen.permissions import request_permissions
+
+    request_permissions()
+
+
+@app.command()
+def test_mic() -> None:
+    """Graba 3 segundos de audio del micrófono y los reproduce (test)."""
+    import sounddevice as sd
+    from belen.recorder import AudioRecorder
+
+    console.print("[bold]Test de micrófono:[/bold]")
+    console.print("  Hablá algo durante 3 segundos...")
+
+    rec = AudioRecorder()
+    rec.start()
+    import time
+
+    time.sleep(3)
+    audio, sr = rec.stop()
+
+    if audio.size == 0:
+        console.print("[red]✗ No se grabó nada. Verificá permisos de Micrófono.[/red]")
+        raise typer.Exit(1)
+
+    import numpy as np
+
+    rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+    console.print(f"  Audio capturado: {len(audio)} samples @ {sr}Hz")
+    console.print(f"  Volumen RMS: {rms:.0f}")
+
+    if rms < 100:
+        console.print("[yellow]⚠ El audio está muy bajo o silencioso.[/yellow]")
+    else:
+        console.print("[green]✓ Micrófono funcionando. Reproduciendo...[/green]")
+        sd.play(audio, samplerate=sr)
+        sd.wait()
 
 
 if __name__ == "__main__":

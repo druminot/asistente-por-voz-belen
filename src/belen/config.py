@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     belen_wakeword_enabled: bool = Field(default=True, alias="BELEN_WAKEWORD_ENABLED")
     belen_wakeword: str = Field(default="belen", alias="BELEN_WAKEWORD")
 
-    belen_stt_engine: STTEngine = Field(default=STTEngine.VIBEVOICE_ASR, alias="BELEN_STT_ENGINE")
+    belen_stt_engine: STTEngine = Field(default=STTEngine.FASTER_WHISPER, alias="BELEN_STT_ENGINE")
     belen_stt_lang: str = Field(default="es", alias="BELEN_STT_LANG")
     belen_whisper_model: str = Field(default="base", alias="BELEN_WHISPER_MODEL")
 
