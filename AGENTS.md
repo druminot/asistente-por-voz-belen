@@ -61,7 +61,10 @@ Hotkey (Option+Z+,) o Wake word ("Belen")
 - **Orquestación**: Python 3.11+ con asyncio
 
 ### Modelos LLM verificados en opencode (jun-2026)
-- `ollama-cloud/minimax-m3` (default, actual)
+- `ollama-cloud/glm-5.1` (default — Zhipu AI flagship, agentic, comparable a Claude Opus 4.6)
+- `ollama-cloud/glm-5.2`
+- `ollama-cloud/glm-4.7`
+- `ollama-cloud/minimax-m3`
 - `ollama-cloud/qwen3.5:397b`
 - `ollama-cloud/qwen3-coder-next`
 - `ollama-cloud/qwen3-coder:480b`

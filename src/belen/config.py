@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     )
 
     opencode_bin: str = Field(default="opencode", alias="OPENCODE_BIN")
-    opencode_model: str = Field(default="ollama-cloud/minimax-m3", alias="OPENCODE_MODEL")
+    opencode_model: str = Field(default="ollama-cloud/glm-5.1", alias="OPENCODE_MODEL")
     opencode_base_url: str = Field(default="http://localhost:11434/v1", alias="OPENCODE_BASE_URL")
     opencode_agent: str = Field(default="", alias="OPENCODE_AGENT")
 

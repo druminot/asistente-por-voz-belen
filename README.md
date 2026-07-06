@@ -89,7 +89,7 @@ Toda la config se hace vía variables de entorno o `.env`. Las claves más impor
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `OPENCODE_MODEL` | `ollama-cloud/minimax-m3` | Modelo LLM a usar |
+| `OPENCODE_MODEL` | `ollama-cloud/glm-5.1` | Modelo LLM a usar (Zhipu AI flagship, agentic) |
 | `BELEN_HOTKEY` | `option+z+comma` | Combinación para push-to-talk |
 | `BELEN_HOTKEY_MODE` | `push_to_talk` | `push_to_talk` o `toggle` |
 | `BELEN_WAKEWORD_ENABLED` | `true` | Activar wake word "Belen" |
