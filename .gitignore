@@ -1,27 +1,38 @@
-# Python
+# Runtime
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-venv/
-env/
-.venv/
+build/
+dist/
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+htmlcov/
+.coverage
 
-# Entorno y secretos
+# Entorno virtual
+venv/
+env/
+.venv/
+.python-version
+
+# Config y secretos
 .env
 .env.local
 *.key
 *.pem
 
-# Audio temporal
+# Audio temporal y modelos (mucho peso, se bajan aparte)
+models/
+models/recordings/
 *.wav
 *.mp3
 *.ogg
+*.pcm
 !docs/**/*.wav
+!assets/sounds/*.wav
 
 # OS
 .DS_Store
@@ -31,3 +42,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# App empaquetada macOS
+*.app/
+*.dmg

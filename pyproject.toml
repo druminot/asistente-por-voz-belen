@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "belen"
+version = "0.1.0"
+description = "Asistente por voz para macOS powered by opencode + Ollama"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "druminot" }
+]
+keywords = ["voice-assistant", "opencode", "ollama", "macos", "stt", "tts"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+dependencies = [
+    "python-dotenv>=1.0.1",
+    "typer>=0.12.5",
+    "rich>=13.9.4",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "sounddevice>=0.4.7",
+    "soundfile>=0.12.1",
+    "numpy>=1.26.0",
+    "pynput>=1.7.7",
+    "rumps>=0.4.0",
+    "PyObjC>=10.3",
+]
+
+[project.optional-dependencies]
+stt-vibevoice = [
+    "transformers>=4.46.0",
+    "torch>=2.2.0",
+    "accelerate>=0.34.0",
+    "huggingface-hub>=0.26.0",
+]
+stt-whisper = [
+    "faster-whisper>=1.0.3",
+]
+tts-vibevoice = [
+    "vibevoice>=0.1.0",
+]
+wakeword = [
+    "openwakeword>=0.6.0",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+]
+all = [
+    "belen[stt-vibevoice,stt-whisper,tts-vibevoice,wakeword,dev]"
+]
+
+[project.scripts]
+belen = "belen.cli:app"
+belen-onboard = "belen.onboard:main"
+
+[project.urls]
+Repository = "https://github.com/druminot/asistente-por-voz-belen"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+belen = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
