@@ -55,10 +55,19 @@ Hotkey (Option+Z+,) o Wake word ("Belen")
 - **Wake word**: openwakeword ("Belen", toggleable)
 - **Captura audio**: sounddevice (PortAudio)
 - **STT**: VibeVoice-ASR-7B (principal) / faster-whisper (fallback)
-- **Cerebro**: opencode CLI + Ollama (minimax-m3)
+- **Cerebro**: opencode CLI (`opencode run -m provider/model`) + Ollama
 - **TTS**: VibeVoice-Realtime-0.5B (principal) / Piper / macOS say (fallback)
 - **UI flotante**: rumps + PyObjC (macOS status bar)
 - **Orquestación**: Python 3.11+ con asyncio
+
+### Modelos LLM verificados en opencode (jun-2026)
+- `ollama-cloud/minimax-m3` (default, actual)
+- `ollama-cloud/qwen3.5:397b`
+- `ollama-cloud/qwen3-coder-next`
+- `ollama-cloud/qwen3-coder:480b`
+- `ollama-cloud/deepseek-v3.2`
+
+**NOTA**: `qwen3.6` no existe como modelo. Listá los disponibles con `belen models` o `opencode models`.
 
 ## Decisiones de diseño
 - Hotkey: `Option + Z + ,` (push-to-talk) + wake word "Belen" (toggleable)
