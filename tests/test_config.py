@@ -12,7 +12,7 @@ def test_default_settings():
 
     s = Settings()
     assert s.opencode_bin == "opencode"
-    assert s.belen_hotkey == "option+z+comma"
+    assert s.belen_hotkey == "shift+z"
     assert s.belen_hotkey_mode == HotkeyMode.PUSH_TO_TALK
     assert s.belen_wakeword_enabled is True
     assert s.belen_wakeword == "belen"

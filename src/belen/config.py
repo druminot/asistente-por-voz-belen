@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     opencode_base_url: str = Field(default="http://localhost:11434/v1", alias="OPENCODE_BASE_URL")
     opencode_agent: str = Field(default="", alias="OPENCODE_AGENT")
 
-    belen_hotkey: str = Field(default="option+z+comma", alias="BELEN_HOTKEY")
+    belen_hotkey: str = Field(default="shift+z", alias="BELEN_HOTKEY")
     belen_hotkey_mode: HotkeyMode = Field(default=HotkeyMode.PUSH_TO_TALK, alias="BELEN_HOTKEY_MODE")
 
     belen_wakeword_enabled: bool = Field(default=True, alias="BELEN_WAKEWORD_ENABLED")
