@@ -27,6 +27,7 @@ from belen.safety import validate_prompt
 from belen.stt import STTManager
 from belen.tts import TTSManager
 from belen.ui import ConsoleUI, FloatingUI
+from belen.visual_ui import FallbackVisualUI, get_visual_ui
 from belen.wakeword import WakeWordDetector
 
 
@@ -64,7 +65,7 @@ class BelenPipeline:
         self.tts = tts or TTSManager()
         self.project_selector = project_selector or ProjectSelector()
         self.status = status or StatusDisplay()
-        self.ui = ui or ConsoleUI()
+        self.ui = ui or FallbackVisualUI()
         self.wakeword = wakeword or WakeWordDetector()
         self._hotkey_listener: HotkeyListener | None = None
         self._is_running = False

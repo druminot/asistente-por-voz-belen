@@ -89,6 +89,7 @@ def start(
 
     from belen.pipeline import BelenPipeline
     from belen.ui import ConsoleUI, FloatingUI
+    from belen.visual_ui import get_visual_ui
 
     pipeline = BelenPipeline()
     if project is not None:
@@ -103,8 +104,7 @@ def start(
     pipeline.on_turn(on_turn)
 
     if use_floating_ui:
-        # Modo con UI flotante: rumps corre en el main thread,
-        # el hotkey listener y el resto del pipeline corren en threads daemon.
+        # Modo con UI visual estilo Siri
         import platform
         import threading
 
@@ -112,52 +112,51 @@ def start(
             try:
                 import rumps  # noqa: F401
 
-                ui = FloatingUI()
-                ui.set_callbacks(
-                    on_toggle_wakeword=lambda enabled: console.print(
-                        f"[cyan]Wake word {'activado' if enabled else 'desactivado'}[/cyan]"
-                    ),
-                    on_quit=lambda: pipeline.stop(),
+                visual = get_visual_ui()
+                pipeline.ui = visual
+
+                # Pequeño menú de rumps para control adicional
+                rumps_app = rumps.App("Belen", title="⚪ Belen")
+                wakeword_item = rumps.MenuItem(
+                    "Wake word activado",
+                    callback=lambda sender: None,
                 )
-                pipeline.ui = ui
+                wakeword_item.state = True
+                rumps_app.menu = [
+                    rumps.MenuItem("Estado: idle"),
+                    None,
+                    wakeword_item,
+                    rumps.MenuItem("Salir", callback=lambda _: pipeline.stop()),
+                ]
 
                 # Arrancar hotkey listener en thread daemon
                 pipeline.start()
 
-                # Registrá Ctrl+C para terminar limpiamente
+                # Registrá Ctrl+C
                 import signal
 
                 def handle_sigint(sig: int, frame: object) -> None:
                     console.print("\n[yellow]Deteniendo Belen...[/yellow]")
                     pipeline.stop()
-                    if ui._app is not None:
-                        rumps.quit_application(ui._app)
+                    try:
+                        visual.stop()
+                    except Exception:
+                        pass
+                    rumps.quit_application(rumps_app)
 
                 signal.signal(signal.SIGINT, handle_sigint)
 
-                # Correr rumps en el main thread (bloqueante)
-                ui._app = rumps.App("Belen", title="⚪ Belen")
-                menu_item = rumps.MenuItem("Estado: idle")
-                wakeword_item = rumps.MenuItem(
-                    "Wake word activado",
-                    callback=ui._handle_toggle_wakeword,
-                )
-                wakeword_item.state = ui._wakeword_enabled
-                ui._menu_item = menu_item
-                ui._wakeword_item = wakeword_item
-                ui._app.menu = [
-                    menu_item,
-                    None,
-                    wakeword_item,
-                    rumps.MenuItem("Salir", callback=ui._handle_quit),
-                ]
-                ui._running = True
-                ui._app.run()
-            except ImportError:
-                console.print("[yellow]rumps no disponible, arrancando sin UI flotante.[/yellow]")
+                # Correr la ventana visual estilo Siri en el main thread (bloqueante)
+                visual.start()
+
+            except ImportError as e:
+                console.print(f"[yellow]rumps no disponible ({e}), arrancando sin UI flotante.[/yellow]")
                 use_floating_ui = False
-        else:
-            use_floating_ui = False
+            except Exception as e:
+                console.print(f"[red]Error arrancando UI visual: {e}[/red]")
+                import traceback
+                console.print(traceback.format_exc())
+                use_floating_ui = False
 
     if not use_floating_ui:
         # Modo sin UI flotante: hotkey listener en main thread
