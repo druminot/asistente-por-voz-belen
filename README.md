@@ -1,117 +1,123 @@
 # Belen — Asistente por Voz para macOS
 
-Asistente por voz personal que combina **STT + opencode + TTS** en un daemon para macOS. Hablale, te escucha, consulta a opencode (con Ollama o cualquier modelo), y te responde hablando.
+Asistente por voz personal que combina **STT + opencode + TTS** en un daemon para macOS. Hablale, te escucha, consulta a opencode (con GLM-5.1 o cualquier modelo), y te responde hablando. Con ventana visual estilo Siri.
 
-## Características
+## 🎙️ Cómo funciona
 
-- 🎙️ **Push-to-talk**: mantené `Option + Z + ,` apretada para hablar.
-- 🗣️ **Wake word** (opcional): decí "Belen" para empezar a grabar.
-- 🧠 **Cerebro opencode**: cualquier modelo (Claude, GPT, Qwen, DeepSeek, Ollama local).
-- 🔊 **TTS state-of-the-art**: VibeVoice-Realtime, Piper, o macOS `say` (fallback).
-- 📁 **Selector de proyecto por voz**: "Belen, andá al proyecto foo".
-- 🛡️ **Modo seguro**: opencode solo lee/edita archivos, sin comandos bash.
-- 🎨 **UI flotante** en la barra de menús de macOS con punto de color por estado.
-- 🇪🇸 **Español nativo** (también soporta 50+ idiomas vía VibeVoice-ASR).
+```
+┌────────────────────────────────────────────────────────────┐
+│  VENTANA VISUAL (siempre presente)                         │
+│                                                            │
+│              ┌──────────────────┐                          │
+│              │  ◯  Belen        │  ← gris = idle           │
+│              │                  │                          │
+│              │  ⌥ + Z + ,       │  ← recordá la hotkey     │
+│              │  o decí "Belen"  │                          │
+│              │                  │                          │
+│              │  tu texto...     │  ← aparece tu voz        │
+│              │  respuesta...    │  ← respuesta de Belen    │
+│              └──────────────────┘                          │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 
-## Requisitos
+FLUJO CUANDO APRETÁS LA HOTKEY ⌥+Z+,:
 
-- macOS 11+ (Big Sur o superior)
-- Python 3.11+
-- [opencode](https://opencode.ai) instalado (`curl -fsSL https://opencode.ai/install | bash`)
-- Permiso de **Micrófono** para la Terminal (Ajustes → Privacidad y seguridad)
-- (Opcional) [Ollama](https://ollama.com) con un modelo local
-
-## Instalación
-
-```bash
-git clone https://github.com/druminot/asistente-por-voz-belen.git
-cd asistente-por-voz-belen
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-cp .env.example .env
-# Editá .env con tu config preferida
+  1. 🤚 Vos apretás: Option + Z + ,
+  2. 🔴 El orbe se pone ROJO + texto "Escuchando..."
+  3. 🗣️ Hablás mientras la hotkey está apretada
+  4. 🤚 Soltás la hotkey
+  5. 🟡 Orbe AMARILLO + "Pensando..." (transcribe tu voz)
+  6. 🧠 Belen consulta opencode + GLM-5.1
+  7. 🟢 Orbe VERDE + "Hablando..." (reproduce por audio)
+  8. ⚪ Vuelve a idle, esperándote
 ```
 
-Con todos los extras opcionales (incluye VibeVoice-ASR, wake word, dev tools):
+## 🎬 Estados visuales del orbe
 
-```bash
-pip install -e ".[all]"
-```
+| Estado | Color | Significado |
+|--------|-------|-------------|
+| ⚪ IDLE | Gris | Esperando que hables |
+| 🔴 LISTENING | Rojo | Estás hablando ahora |
+| 🟡 PROCESSING | Amarillo | Belen está pensando |
+| 🟢 SPEAKING | Verde | Belen te está respondiendo |
+| ❌ ERROR | Rojo oscuro | Algo falló |
 
-## Uso
+## ⌨️ Cómo usarlo
 
-### Iniciar el daemon
+1. **Abrí la Terminal** y ejecutá:
+   ```bash
+   cd "/Users/druminot/Documents/Codigos Varios/Asistente por Voz (Belen)"
+   source .venv/bin/activate
+   belen start
+   ```
 
-```bash
-belen start
-```
+2. **Aceptá los permisos** la primera vez:
+   - System Settings → Privacy & Security → **Microphone** → agregar Terminal
+   - System Settings → Privacy & Security → **Accessibility** → agregar Terminal
 
-Esto:
-1. Carga la configuración de `.env`.
-2. Inicia el listener de hotkey.
-3. Arranca la UI flotante (iconito en la barra superior de macOS).
-4. Espera a que apretes la hotkey o digas "Belen".
+3. **Mirá la ventana** que aparece arriba en el centro de la pantalla — vas a ver el orbe gris pulsando.
 
-### Probar el brain sin audio
+4. **Apretá `Option + Z + ,` (mantener)** y hablá. Soltá cuando termines. Belen te escucha, piensa y te responde hablando.
 
-```bash
-belen ask "explicame este código en una línea"
-belen ask "creá un script hello.py" --project /path/to/proj
-belen ask "qué hace este archivo?" -m ollama-cloud/qwen3.5:397b
-```
+5. **Si la hotkey no funciona** porque choca con otra app, podés cambiar a modo toggle con `BELEN_HOTKEY_MODE=toggle` en `.env` — apretás una vez para empezar, otra vez para parar.
 
-### Verificar el entorno
+6. **O usá el wake word**: decí "Belen" y empezá a hablar (sin apretar nada).
 
-```bash
-belen check
-```
+7. **Para salir**: `Ctrl+C` en la Terminal.
 
-Verifica Python, opencode, micrófonos disponibles, y carpeta de proyectos.
+## 🛠️ Comandos disponibles
 
-### Listar modelos
+| Comando | Qué hace |
+|---------|----------|
+| `belen start` | Arranca el daemon con la UI visual |
+| `belen start --no-ui` | Arranca sin ventana (solo terminal) |
+| `belen start --project /path` | Arranca apuntando a un proyecto específico |
+| `belen ask "pregunta"` | Manda una pregunta a opencode sin audio |
+| `belen check` | Verifica que todo esté instalado |
+| `belen models` | Lista los modelos LLM disponibles en opencode |
+| `belen config` | Muestra la configuración actual |
 
-```bash
-belen models
-```
+## 🎤 Comandos de voz
 
-Muestra todos los modelos disponibles en tu opencode (Claude, GPT, Qwen, DeepSeek, Ollama, etc.).
+Además de hablar normalmente, podés:
 
-### Ver configuración
+- **"Belen, andá al proyecto `nombre`"** — cambia el proyecto activo (lee de `BELEN_PROJECTS_DIR`)
+- **"Belen, abrí `foo`"** — alias del anterior
+- **"Belen, cambiá a `bar`"** — alias del anterior
+- **Hablar normal** — le pasa todo a opencode + GLM-5.1
 
-```bash
-belen config
-```
+## 🧠 Cerebro
 
-## Configuración
+Usa **opencode** CLI con el modelo **GLM-5.1** de Zhipu AI (flagship para agentic engineering, comparable a Claude Opus 4.6). Podés cambiar el modelo editando `OPENCODE_MODEL` en `.env`:
+- `ollama-cloud/glm-5.1` (default)
+- `ollama-cloud/glm-5.2`
+- `ollama-cloud/minimax-m3`
+- `ollama-cloud/qwen3-coder-next`
+- `ollama-cloud/deepseek-v3.2`
+- Y muchos más (listá con `belen models`)
 
-Toda la config se hace vía variables de entorno o `.env`. Las claves más importantes:
+## ⚙️ Configuración
+
+Toda la config se hace vía `.env`. Las claves más importantes:
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `OPENCODE_MODEL` | `ollama-cloud/glm-5.1` | Modelo LLM a usar (Zhipu AI flagship, agentic) |
+| `OPENCODE_MODEL` | `ollama-cloud/glm-5.1` | Modelo LLM a usar |
 | `BELEN_HOTKEY` | `option+z+comma` | Combinación para push-to-talk |
 | `BELEN_HOTKEY_MODE` | `push_to_talk` | `push_to_talk` o `toggle` |
 | `BELEN_WAKEWORD_ENABLED` | `true` | Activar wake word "Belen" |
 | `BELEN_WAKEWORD` | `belen` | Palabra de activación |
-| `BELEN_STT_ENGINE` | `vibevoice-asr` | `vibevoice-asr` o `faster-whisper` |
-| `BELEN_TTS_ENGINE` | `vibevoice-realtime` | `vibevoice-realtime`, `piper` o `macos-say` |
+| `BELEN_STT_ENGINE` | `vibevoice-asr` | Motor de STT |
+| `BELEN_TTS_ENGINE` | `vibevoice-realtime` | Motor de TTS |
 | `BELEN_PROJECTS_DIR` | `~/Documents/Codigos Varios` | Carpeta de proyectos |
-| `BELEN_FLOATING_UI` | `true` | Mostrar indicador flotante |
 | `BELEN_ALLOW_FILE_EDIT` | `true` | Permitir que opencode edite archivos |
 
 Ver `.env.example` para la lista completa.
 
-## Comandos de voz
-
-- **Hablar normalmente**: "explicame qué hace este archivo"
-- **Cambiar de proyecto**: "Belen, andá al proyecto smart-home" / "abrí belen" / "cambiá a medidor"
-- **Comandos bash**: bloqueados por seguridad (aunque opencode no los ejecutaría igual)
-
-## Arquitectura
+## 🏗️ Arquitectura
 
 ```
-Hotkey (Option+Z+,) o Wake word ("Belen")
+Hotkey (⌥+Z+,) o Wake word ("Belen")
         ↓
     Recorder (sounddevice, 16kHz, int16)
         ↓
@@ -123,65 +129,36 @@ Hotkey (Option+Z+,) o Wake word ("Belen")
         ↓ (si es prompt normal)
     Safety (validar prompt)
         ↓
-    Brain (opencode CLI + Ollama/minimax-m3)
+    Brain (opencode CLI + GLM-5.1 vía Ollama cloud)
         ↓
     TTS (VibeVoice-Realtime-0.5B / Piper / macOS say)
         ↓
-    Speaker (sounddevice reproduce audio)
-        ↓
-    UI flotante (rumps)
+    Speaker + UI visual (orbe pulsante estilo Siri)
 ```
 
-## Estructura del proyecto
-
-```
-src/belen/
-├── cli.py             # CLI con typer
-├── config.py          # pydantic-settings
-├── pipeline.py        # Orquestador principal
-├── hotkey.py          # Listener de hotkey global
-├── recorder.py        # Captura de micrófono
-├── stt.py             # STT con VibeVoice-ASR + faster-whisper
-├── brain.py           # Wrapper de opencode CLI
-├── tts.py             # TTS multi-backend
-├── wakeword.py        # Wake word "Belen" (openwakeword)
-├── project_selector.py # Selector de proyecto por voz
-├── ui.py              # UI flotante con rumps
-├── feedback.py        # Beeps y status display
-└── safety.py          # Validación de prompts
-```
-
-## Desarrollo
-
-```bash
-# Tests
-pytest tests/           # 85 tests
-
-# Lint
-ruff check src/belen/
-
-# Typecheck
-mypy src/belen/
-```
-
-## Seguridad
+## 🛡️ Seguridad
 
 - opencode corre con `--cwd=<proyecto>` para limitar el alcance.
-- Comandos bash están deshabilitados en la config de opencode.
-- `safety.py` bloquea patrones peligrosos (`rm -rf`, `sudo`, etc.) antes de enviar a opencode.
-- Si una transcripción se interpreta mal, lo peor que puede pasar es editar/crear un archivo incorrecto.
+- Comandos bash deshabilitados.
+- `safety.py` bloquea `rm -rf`, `sudo`, etc. antes de enviar a opencode.
 
-## Roadmap
+## 📦 Instalación
 
-- [ ] Empaquetado como `.app` de macOS con py2app
-- [ ] Streaming TTS para empezar a hablar antes de que termine la generación
-- [ ] Hot-reload de skills
-- [ ] Memoria persistente entre sesiones (vault estilo Obsidian)
-- [ ] Speaker ID (voiceprint para que solo vos puedas activar a Belen)
+```bash
+git clone https://github.com/druminot/asistente-por-voz-belen.git
+cd asistente-por-voz-belen
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+cp .env.example .env
+belen check   # verificá que todo funcione
+belen start   # arrancá!
+```
 
-## Licencia
-
-MIT
+Con modelos pesados (VibeVoice-ASR 7B + VibeVoice-Realtime 0.5B):
+```bash
+pip install -e ".[all]"
+```
 
 ## Repo
 

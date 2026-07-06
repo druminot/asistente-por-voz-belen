@@ -58,9 +58,9 @@ class SiriStyleWindow:
         win.update(UIState.LISTENING)  # desde cualquier thread
     """
 
-    WINDOW_WIDTH = 320
-    WINDOW_HEIGHT = 320
-    ORBE_RADIUS = 60
+    WINDOW_WIDTH = 380
+    WINDOW_HEIGHT = 280
+    ORBE_RADIUS = 45
 
     def __init__(self) -> None:
         self._state = UIState.IDLE
@@ -170,15 +170,17 @@ class SiriStyleWindow:
         container = self._window.contentView()
         container.setWantsLayer_(True)
         bg_layer = CALayer.layer()
-        bg_layer.setBackgroundColor_(CGColorCreateGenericRGB(0.0, 0.0, 0.0, 0.0))
+        bg_layer.setBackgroundColor_(CGColorCreateGenericRGB(0.08, 0.08, 0.12, 0.92))
+        bg_layer.setCornerRadius_(16.0)
         container.setLayer_(bg_layer)
 
         # Orbe central con gradient
+        orbe_size = self.ORBE_RADIUS * 2.6
         orbe_frame = NSMakeRect(
-            (win_w - self.ORBE_RADIUS * 2.6) / 2,
-            (win_h - self.ORBE_RADIUS * 2.6) / 2 + 20,
-            self.ORBE_RADIUS * 2.6,
-            self.ORBE_RADIUS * 2.6,
+            (win_w - orbe_size) / 2,
+            win_h - orbe_size - 50,
+            orbe_size,
+            orbe_size,
         )
         orbe_layer = CALayer.layer()
         orbe_layer.setFrame_(orbe_frame)
@@ -189,25 +191,26 @@ class SiriStyleWindow:
         orbe_layer.setShadowColor_(
             CGColorCreateGenericRGB(*STATE_COLORS[self._state])
         )
-        orbe_layer.setShadowRadius_(30)
-        orbe_layer.setShadowOpacity_(0.7)
+        orbe_layer.setShadowRadius_(25)
+        orbe_layer.setShadowOpacity_(0.8)
         from AppKit import NSMakeSize
 
         orbe_layer.setShadowOffset_(NSMakeSize(0, 0))
         bg_layer.addSublayer_(orbe_layer)
         self._orbe_layer = orbe_layer
 
-        # Anillo pulsante alrededor
+        # Anillo pulsante alrededor del orbe
+        ring_size = self.ORBE_RADIUS * 3.2
         ring_frame = NSMakeRect(
-            (win_w - self.ORBE_RADIUS * 3.0) / 2,
-            (win_h - self.ORBE_RADIUS * 3.0) / 2 + 20,
-            self.ORBE_RADIUS * 3.0,
-            self.ORBE_RADIUS * 3.0,
+            (win_w - ring_size) / 2,
+            win_h - ring_size - 50,
+            ring_size,
+            ring_size,
         )
         ring_layer = CALayer.layer()
         ring_layer.setFrame_(ring_frame)
-        ring_layer.setCornerRadius_(self.ORBE_RADIUS * 1.5)
-        ring_layer.setBorderWidth_(2.0)
+        ring_layer.setCornerRadius_(self.ORBE_RADIUS * 1.6)
+        ring_layer.setBorderWidth_(2.5)
         ring_layer.setBorderColor_(
             CGColorCreateGenericRGB(*STATE_COLORS[self._state])
         )
@@ -215,8 +218,10 @@ class SiriStyleWindow:
         bg_layer.addSublayer_(ring_layer)
         self._ring_layer = ring_layer
 
-        # Label de estado
-        label_frame = NSMakeRect(20, 50, win_w - 40, 30)
+        # Label de estado (grande, prominente)
+        from AppKit import NSFont
+
+        label_frame = NSMakeRect(20, 110, win_w - 40, 32)
         self._state_label = NSTextField.alloc().initWithFrame_(label_frame)
         self._state_label.setEditable_(False)
         self._state_label.setSelectable_(False)
@@ -224,27 +229,38 @@ class SiriStyleWindow:
         self._state_label.setDrawsBackground_(False)
         self._state_label.setTextColor_(NSColor.whiteColor())
         self._state_label.setAlignment_(2)  # center
-        from AppKit import NSFont
-
-        self._state_label.setFont_(NSFont.boldSystemFontOfSize_(16))
-        self._state_label.setStringValue_(STATE_LABELS[self._state])
+        self._state_label.setFont_(NSFont.boldSystemFontOfSize_(20))
+        self._state_label.setStringValue_("Belen")
         container.addSubview_(self._state_label)
 
-        # Texto del usuario
-        user_frame = NSMakeRect(20, 20, win_w - 40, 28)
+        # Hotkey hint (chiquito, gris)
+        hint_frame = NSMakeRect(20, 85, win_w - 40, 18)
+        self._hint_label = NSTextField.alloc().initWithFrame_(hint_frame)
+        self._hint_label.setEditable_(False)
+        self._hint_label.setSelectable_(False)
+        self._hint_label.setBordered_(False)
+        self._hint_label.setDrawsBackground_(False)
+        self._hint_label.setTextColor_(NSColor.colorWithCalibratedWhite_alpha_(0.6, 1.0))
+        self._hint_label.setAlignment_(2)
+        self._hint_label.setFont_(NSFont.systemFontOfSize_(10))
+        self._hint_label.setStringValue_("⌥ + Z + ,   o decí 'Belen'")
+        container.addSubview_(self._hint_label)
+
+        # Texto del usuario (lo que dijiste)
+        user_frame = NSMakeRect(20, 50, win_w - 40, 28)
         self._user_text_field = NSTextField.alloc().initWithFrame_(user_frame)
         self._user_text_field.setEditable_(False)
         self._user_text_field.setSelectable_(False)
         self._user_text_field.setBordered_(False)
         self._user_text_field.setDrawsBackground_(False)
-        self._user_text_field.setTextColor_(NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.7))
+        self._user_text_field.setTextColor_(NSColor.colorWithCalibratedRed_green_blue_alpha_(0.6, 0.85, 1.0, 1.0))
         self._user_text_field.setAlignment_(2)
         self._user_text_field.setFont_(NSFont.systemFontOfSize_(12))
         self._user_text_field.setStringValue_("")
         container.addSubview_(self._user_text_field)
 
-        # Texto de Belen
-        belen_frame = NSMakeRect(20, win_h - 50, win_w - 40, 40)
+        # Texto de Belen (la respuesta)
+        belen_frame = NSMakeRect(15, 12, win_w - 30, 32)
         self._belen_text_field = NSTextField.alloc().initWithFrame_(belen_frame)
         self._belen_text_field.setEditable_(False)
         self._belen_text_field.setSelectable_(False)
