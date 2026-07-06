@@ -72,8 +72,8 @@ class VibeVoiceASRBackend(STTBackend):
 
     def is_available(self) -> bool:
         try:
-            import transformers  # noqa: F401
             import torch  # noqa: F401
+            import transformers  # noqa: F401
 
             return True
         except ImportError:
@@ -105,8 +105,9 @@ class VibeVoiceASRBackend(STTBackend):
 
     def transcribe(self, audio: np.ndarray, sample_rate: int) -> str:
         self._load()
-        import soundfile as sf
         import tempfile
+
+        import soundfile as sf
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             sf.write(f.name, audio, sample_rate)

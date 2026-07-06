@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from belen import __version__
-from belen.config import HotkeyMode, STTEngine, TTSEngine, get_settings
+from belen.config import get_settings
 
 app = typer.Typer(
     name="belen",
@@ -32,7 +32,7 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def main(
     version: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option("--version", "-v", callback=_version_callback, is_eager=True),
     ] = None,
 ) -> None:
@@ -42,7 +42,7 @@ def main(
 @app.command()
 def start(
     project: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option("--project", "-p", help="Proyecto sobre el que trabajar"),
     ] = None,
     no_ui: Annotated[
@@ -72,8 +72,46 @@ def start(
             border_style="green",
         )
     )
-    console.print("\n[yellow]⚠ Fase 1 (esqueleto) — el daemon aún no está implementado.[/yellow]")
-    console.print("Próximas fases: hotkey + recorder (F2), STT (F3), opencode (F4), TTS (F5).")
+    if project is not None:
+        console.print(f"[bold]Proyecto inicial:[/bold] [cyan]{project}[/cyan]")
+    console.print()
+    console.print("[bold green]▶ Iniciando Belen...[/bold green]")
+    console.print("  Mantené [cyan]" + s.belen_hotkey + "[/cyan] apretada para hablar.")
+    console.print("  Decí 'Belen' si wake word está activado.")
+    console.print("  Ctrl+C para salir.\n")
+
+    from belen.pipeline import BelenPipeline
+
+    pipeline = BelenPipeline()
+    if project is not None:
+        pipeline.set_active_project(project)
+
+    def on_turn(result: object) -> None:
+        if getattr(result, "error", None):
+            console.print(f"[red]⚠ Error: {result.error}[/red]")
+        elif getattr(result, "project_changed", None):
+            console.print(f"[green]📁 Proyecto: {result.project_changed.name}[/green]")
+
+    pipeline.on_turn(on_turn)
+    pipeline.start()
+
+    try:
+        import signal
+
+        stop_event = {"stop": False}
+
+        def handle_sigint(sig: int, frame: object) -> None:
+            console.print("\n[yellow]Deteniendo Belen...[/yellow]")
+            stop_event["stop"] = True
+            pipeline.stop()
+
+        signal.signal(signal.SIGINT, handle_sigint)
+        signal.pause()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        pipeline.stop()
+        console.print("[bold]Belen detenido.[/bold]")
 
 
 @app.command()
@@ -178,6 +216,46 @@ def models() -> None:
     console.print("[bold]Modelos disponibles en opencode:[/bold]\n")
     for m in brain.list_models():
         console.print(f"  [cyan]{m}[/cyan]")
+
+
+@app.command()
+def ask(
+    prompt: Annotated[
+        str,
+        typer.Argument(help="Prompt para enviar a opencode"),
+    ],
+    project: Annotated[
+        Path | None,
+        typer.Option("--project", "-p", help="Directorio de trabajo"),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="Modelo a usar (formato provider/model)"),
+    ] = None,
+) -> None:
+    """Envía un prompt directo a opencode (sin audio). Útil para probar."""
+    from belen.brain import OpenCodeBrain
+    from belen.safety import validate_prompt
+
+    validation = validate_prompt(prompt)
+    if not validation.ok:
+        console.print(f"[red]✗ Prompt bloqueado: {validation.reason}[/red]")
+        raise typer.Exit(1)
+
+    brain = OpenCodeBrain(model=model)
+    if not brain.is_available():
+        console.print("[red]opencode no encontrado en PATH.[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Enviando a opencode ({brain._model})...[/bold]")
+    try:
+        response = brain.ask_sync(prompt, cwd=project, timeout=120.0)
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    console.print(Panel(response.text, title="Respuesta", border_style="green"))
+    console.print(f"[dim]Duración: {response.duration_seconds:.2f}s[/dim]")
 
 
 if __name__ == "__main__":

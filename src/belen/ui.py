@@ -115,7 +115,6 @@ class FloatingUI:
 
         if self._app is not None:
             try:
-                import rumps
 
                 self._app.title = title
                 if self._menu_item is not None:
@@ -218,7 +217,6 @@ class ConsoleUI:
 def get_ui() -> Any:
     """Devuelve FloatingUI en macOS (si rumps está), sino ConsoleUI."""
     import platform
-    import sys
 
     if platform.system() != "Darwin":
         return ConsoleUI()

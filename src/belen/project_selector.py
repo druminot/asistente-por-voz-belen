@@ -51,8 +51,7 @@ class ProjectSelector:
     )
 
     KEYWORDS_NAVEGACION = {
-        "andá", "anda", "ir", "ve", "cambia", "cambiar", "cambiá", "cambiar",
-        "abrí", "abre", "abrir", "usá", "usa", "usar", "carga", "cargá", "cargar",
+        "andá", "anda", "ir", "ve", "cambia", "cambiar", "cambiá", "abrí", "abre", "abrir", "usá", "usa", "usar", "carga", "cargá", "cargar",
         "entrá", "entra", "entrar",
     }
 

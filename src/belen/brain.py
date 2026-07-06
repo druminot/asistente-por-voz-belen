@@ -9,7 +9,6 @@ Salida por stdout. Devuelve la respuesta del modelo.
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 import subprocess
 from dataclasses import dataclass
