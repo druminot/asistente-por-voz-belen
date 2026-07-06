@@ -1,24 +1,40 @@
 """Cerebro: wrapper de opencode CLI como subproceso.
 
-(Fase 4 — pendiente de integración con opencode)
+Sintaxis de opencode:
+  opencode run -m <provider>/<model> "<prompt>"
+
+Salida por stdout. Devuelve la respuesta del modelo.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from belen.config import get_settings
 
 
+@dataclass
+class BrainResponse:
+    text: str
+    model: str
+    duration_seconds: float
+    raw_stdout: str
+    raw_stderr: str
+
+
 class OpenCodeBrain:
     """Wrapper de opencode CLI en modo no-interactivo.
 
-    opencode acepta un prompt por stdin/argumento y devuelve la respuesta
-    por stdout. Lo invocamos como subproceso desde Python.
+    Uso:
+        brain = OpenCodeBrain()
+        response = brain.ask("explicame este código", cwd=Path("/path/to/proj"))
+        print(response.text)
     """
 
     def __init__(
@@ -28,6 +44,7 @@ class OpenCodeBrain:
         base_url: str | None = None,
         cwd: Path | None = None,
         allow_edit: bool | None = None,
+        agent: str | None = None,
     ) -> None:
         settings = get_settings()
         self._bin = bin_path or settings.opencode_bin
@@ -35,17 +52,28 @@ class OpenCodeBrain:
         self._base_url = base_url or settings.opencode_base_url
         self._cwd = cwd
         self._allow_edit = allow_edit if allow_edit is not None else settings.belen_allow_file_edit
+        self._agent = agent or (settings.opencode_agent or None)
 
     def is_available(self) -> bool:
         return shutil.which(self._bin) is not None
+
+    def _build_args(self, prompt: str) -> list[str]:
+        args = [self._bin, "run", "-m", self._model]
+        if self._agent is not None:
+            args += ["--agent", self._agent]
+        if prompt:
+            args.append(prompt)
+        return args
 
     async def ask(
         self,
         prompt: str,
         cwd: Path | None = None,
         timeout: float = 120.0,
-    ) -> str:
-        """Envía un prompt a opencode y devuelve la respuesta."""
+    ) -> BrainResponse:
+        """Envía un prompt a opencode (async) y devuelve BrainResponse."""
+        import time
+
         if not self.is_available():
             raise RuntimeError(
                 f"opencode no encontrado en PATH (buscado: {self._bin!r}). "
@@ -53,7 +81,8 @@ class OpenCodeBrain:
             )
 
         workdir = cwd or self._cwd
-        args = [self._bin, "run", "--model", self._model, prompt]
+        args = self._build_args(prompt)
+        t0 = time.monotonic()
 
         proc = await asyncio.create_subprocess_exec(
             *args,
@@ -70,21 +99,36 @@ class OpenCodeBrain:
             await proc.wait()
             raise RuntimeError(f"opencode timeout después de {timeout}s") from e
 
+        duration = time.monotonic() - t0
+        out_text = stdout.decode("utf-8", errors="replace")
+        err_text = stderr.decode("utf-8", errors="replace")
+
         if proc.returncode != 0:
-            err = stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"opencode exit code {proc.returncode}: {err}")
+            raise RuntimeError(f"opencode exit code {proc.returncode}: {err_text.strip()}")
 
-        return stdout.decode("utf-8", errors="replace").strip()
+        return BrainResponse(
+            text=out_text.strip(),
+            model=self._model,
+            duration_seconds=duration,
+            raw_stdout=out_text,
+            raw_stderr=err_text,
+        )
 
-    def ask_sync(self, prompt: str, cwd: Path | None = None, timeout: float = 120.0) -> str:
+    def ask_sync(
+        self,
+        prompt: str,
+        cwd: Path | None = None,
+        timeout: float = 120.0,
+    ) -> BrainResponse:
         """Versión sincrónica de ask()."""
+        import time
+
         if not self.is_available():
-            raise RuntimeError(
-                f"opencode no encontrado en PATH (buscado: {self._bin!r})"
-            )
+            raise RuntimeError(f"opencode no encontrado en PATH (buscado: {self._bin!r})")
 
         workdir = cwd or self._cwd
-        args = [self._bin, "run", "--model", self._model, prompt]
+        args = self._build_args(prompt)
+        t0 = time.monotonic()
 
         result = subprocess.run(
             args,
@@ -95,18 +139,69 @@ class OpenCodeBrain:
             cwd=str(workdir) if workdir else None,
         )
 
+        duration = time.monotonic() - t0
         if result.returncode != 0:
             raise RuntimeError(f"opencode exit code {result.returncode}: {result.stderr.strip()}")
 
-        return result.stdout.strip()
+        return BrainResponse(
+            text=result.stdout.strip(),
+            model=self._model,
+            duration_seconds=duration,
+            raw_stdout=result.stdout,
+            raw_stderr=result.stderr,
+        )
 
-    def list_providers(self) -> dict[str, Any]:
-        """Información de configuración."""
+    def list_models(self) -> list[str]:
+        """Lista modelos disponibles (subprocess a `opencode models`)."""
+        if not self.is_available():
+            return []
+        result = subprocess.run(
+            [self._bin, "models"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return []
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+    def info(self) -> dict[str, Any]:
         return {
             "bin": self._bin,
             "model": self._model,
             "base_url": self._base_url,
             "cwd": str(self._cwd) if self._cwd else None,
             "allow_edit": self._allow_edit,
+            "agent": self._agent,
             "available": self.is_available(),
         }
+
+
+class MockBrain:
+    """Brain mock para tests — devuelve respuesta fija."""
+
+    def __init__(self, response: str = "mock brain response") -> None:
+        self._response = response
+        self._calls: list[dict[str, Any]] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def ask_sync(self, prompt: str, cwd: Path | None = None, timeout: float = 120.0) -> BrainResponse:
+        import time
+        t0 = time.monotonic()
+        time.sleep(0.001)
+        self._calls.append({"prompt": prompt, "cwd": str(cwd) if cwd else None})
+        return BrainResponse(
+            text=self._response,
+            model="mock",
+            duration_seconds=time.monotonic() - t0,
+            raw_stdout=self._response,
+            raw_stderr="",
+        )
+
+    async def ask(self, prompt: str, cwd: Path | None = None, timeout: float = 120.0) -> BrainResponse:
+        return self.ask_sync(prompt, cwd, timeout)
+
+    def info(self) -> dict[str, Any]:
+        return {"model": "mock", "available": True}

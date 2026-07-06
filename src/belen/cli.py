@@ -87,6 +87,7 @@ def config() -> None:
     table.add_row("opencode_bin", s.opencode_bin)
     table.add_row("opencode_model", s.opencode_model)
     table.add_row("opencode_base_url", s.opencode_base_url)
+    table.add_row("opencode_agent", s.opencode_agent or "(default)")
     table.add_row("belen_hotkey", s.belen_hotkey)
     table.add_row("belen_hotkey_mode", s.belen_hotkey_mode.value)
     table.add_row("belen_wakeword_enabled", str(s.belen_wakeword_enabled))
@@ -162,6 +163,21 @@ def check() -> None:
     )
 
     console.print("\n[bold]Entorno verificado.[/bold]")
+
+
+@app.command()
+def models() -> None:
+    """Lista los modelos disponibles en opencode."""
+    from belen.brain import OpenCodeBrain
+
+    brain = OpenCodeBrain()
+    if not brain.is_available():
+        console.print("[red]opencode no encontrado en PATH.[/red]")
+        raise typer.Exit(1)
+
+    console.print("[bold]Modelos disponibles en opencode:[/bold]\n")
+    for m in brain.list_models():
+        console.print(f"  [cyan]{m}[/cyan]")
 
 
 if __name__ == "__main__":
