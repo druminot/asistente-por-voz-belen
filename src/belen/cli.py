@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -42,7 +42,7 @@ def main(
 @app.command()
 def start(
     project: Annotated[
-        Path | None,
+        Optional[Path],
         typer.Option("--project", "-p", help="Proyecto sobre el que trabajar"),
     ] = None,
     no_ui: Annotated[
@@ -55,7 +55,12 @@ def start(
     ] = False,
 ) -> None:
     """Inicia el daemon de Belen."""
+    import platform
+
     s = get_settings()
+    use_floating_ui = (
+        s.belen_floating_ui and not no_ui and platform.system() == "Darwin"
+    )
     console.print(
         Panel.fit(
             f"[bold green]Belen v{__version__}[/bold green]\n"
@@ -66,8 +71,8 @@ def start(
             f"STT: [cyan]{s.belen_stt_engine.value}[/cyan]\n"
             f"TTS: [cyan]{s.belen_tts_engine.value}[/cyan]\n"
             f"Cerebro: [cyan]opencode[/cyan] ({s.opencode_model})\n"
-            f"UI flotante: [{'green' if s.belen_floating_ui and not no_ui else 'red'}]"
-            f"{'on' if s.belen_floating_ui and not no_ui else 'off'}[/]",
+            f"UI flotante: [{'green' if use_floating_ui else 'red'}]"
+            f"{'on' if use_floating_ui else 'off'}[/]",
             title="Estado",
             border_style="green",
         )
@@ -76,11 +81,14 @@ def start(
         console.print(f"[bold]Proyecto inicial:[/bold] [cyan]{project}[/cyan]")
     console.print()
     console.print("[bold green]▶ Iniciando Belen...[/bold green]")
+    if use_floating_ui:
+        console.print("  UI flotante [cyan]ACTIVA[/cyan] — mirá la barra de menús de macOS.")
     console.print("  Mantené [cyan]" + s.belen_hotkey + "[/cyan] apretada para hablar.")
     console.print("  Decí 'Belen' si wake word está activado.")
     console.print("  Ctrl+C para salir.\n")
 
     from belen.pipeline import BelenPipeline
+    from belen.ui import ConsoleUI, FloatingUI
 
     pipeline = BelenPipeline()
     if project is not None:
@@ -93,25 +101,82 @@ def start(
             console.print(f"[green]📁 Proyecto: {result.project_changed.name}[/green]")
 
     pipeline.on_turn(on_turn)
-    pipeline.start()
 
-    try:
-        import signal
+    if use_floating_ui:
+        # Modo con UI flotante: rumps corre en el main thread,
+        # el hotkey listener y el resto del pipeline corren en threads daemon.
+        import platform
+        import threading
 
-        stop_event = {"stop": False}
+        if platform.system() == "Darwin":
+            try:
+                import rumps  # noqa: F401
 
-        def handle_sigint(sig: int, frame: object) -> None:
-            console.print("\n[yellow]Deteniendo Belen...[/yellow]")
-            stop_event["stop"] = True
-            pipeline.stop()
+                ui = FloatingUI()
+                ui.set_callbacks(
+                    on_toggle_wakeword=lambda enabled: console.print(
+                        f"[cyan]Wake word {'activado' if enabled else 'desactivado'}[/cyan]"
+                    ),
+                    on_quit=lambda: pipeline.stop(),
+                )
+                pipeline.ui = ui
 
-        signal.signal(signal.SIGINT, handle_sigint)
-        signal.pause()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        pipeline.stop()
-        console.print("[bold]Belen detenido.[/bold]")
+                # Arrancar hotkey listener en thread daemon
+                pipeline.start()
+
+                # Registrá Ctrl+C para terminar limpiamente
+                import signal
+
+                def handle_sigint(sig: int, frame: object) -> None:
+                    console.print("\n[yellow]Deteniendo Belen...[/yellow]")
+                    pipeline.stop()
+                    if ui._app is not None:
+                        rumps.quit_application(ui._app)
+
+                signal.signal(signal.SIGINT, handle_sigint)
+
+                # Correr rumps en el main thread (bloqueante)
+                ui._app = rumps.App("Belen", title="⚪ Belen")
+                menu_item = rumps.MenuItem("Estado: idle")
+                wakeword_item = rumps.MenuItem(
+                    "Wake word activado",
+                    callback=ui._handle_toggle_wakeword,
+                )
+                wakeword_item.state = ui._wakeword_enabled
+                ui._menu_item = menu_item
+                ui._wakeword_item = wakeword_item
+                ui._app.menu = [
+                    menu_item,
+                    None,
+                    wakeword_item,
+                    rumps.MenuItem("Salir", callback=ui._handle_quit),
+                ]
+                ui._running = True
+                ui._app.run()
+            except ImportError:
+                console.print("[yellow]rumps no disponible, arrancando sin UI flotante.[/yellow]")
+                use_floating_ui = False
+        else:
+            use_floating_ui = False
+
+    if not use_floating_ui:
+        # Modo sin UI flotante: hotkey listener en main thread
+        pipeline.start()
+
+        try:
+            import signal
+
+            def handle_sigint(sig: int, frame: object) -> None:
+                console.print("\n[yellow]Deteniendo Belen...[/yellow]")
+                pipeline.stop()
+
+            signal.signal(signal.SIGINT, handle_sigint)
+            signal.pause()
+        except (KeyboardInterrupt, SystemExit):
+            pass
+
+    pipeline.stop()
+    console.print("[bold]Belen detenido.[/bold]")
 
 
 @app.command()

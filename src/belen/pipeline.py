@@ -102,7 +102,7 @@ class BelenPipeline:
             print(f"[WARN] Callback on_turn falló: {e}")
 
     def start(self) -> None:
-        """Arranca el pipeline: hotkey listener + UI."""
+        """Arranca el pipeline: hotkey listener + wakeword."""
         if self._is_running:
             return
         self._is_running = True
@@ -117,6 +117,10 @@ class BelenPipeline:
         self._hotkey_listener.on_press(self._handle_hotkey_press)
         self._hotkey_listener.on_release(self._handle_hotkey_release)
         self._hotkey_listener.start()
+
+    def start_hotkey_only(self) -> None:
+        """Arranca solo el listener de hotkey (sin tocar UI)."""
+        self.start()
 
     def stop(self) -> None:
         if not self._is_running:
