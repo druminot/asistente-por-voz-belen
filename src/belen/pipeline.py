@@ -73,6 +73,8 @@ class BelenPipeline:
         self._lock = threading.Lock()
         self._on_turn: Callable[[TurnResult], None] | None = None
         self._pump_thread: threading.Thread | None = None
+        self._press_in_progress: bool = False
+        self._is_processing: bool = False
 
         if self.settings.belen_default_project:
             default = Path(self.settings.belen_default_project)
@@ -167,17 +169,32 @@ class BelenPipeline:
             self.recorder.cancel()
 
     def _handle_hotkey_press(self) -> None:
-        from belen.logging_utils import debug, info
-        info("HOTKEY", "press — arrancando recorder")
+        from belen.logging_utils import debug, info, error
+        info("HOTKEY", "press — arrancando recorder (en thread aparte)")
+        # Lanzar recorder.start() en un thread aparte para no bloquear
+        # el pump thread (PortAudio puede tardar 1-2s en abrir el stream).
+        self._press_in_progress = True
+        t = threading.Thread(
+            target=self._do_press,
+            name="belen-press",
+            daemon=True,
+        )
+        t.start()
+
+    def _do_press(self) -> None:
+        """Ejecuta el press en thread aparte."""
+        from belen.logging_utils import info, error
         try:
             self.recorder.start()
             self.status.listening()
             self._ui_listening()
             info("HOTKEY", "recorder arrancado, UI en LISTENING")
         except Exception as e:
-            from belen.logging_utils import error
             error("HOTKEY", f"excepción en press: {e}")
             self.status.error(str(e))
+            self._ui_error(str(e))
+        finally:
+            self._press_in_progress = False
 
     def _ui_listening(self) -> None:
         """Pone la UI en estado listening (compatible con todos los tipos)."""
@@ -219,6 +236,17 @@ class BelenPipeline:
 
     def _handle_hotkey_release(self) -> None:
         from belen.logging_utils import debug, info, warn, error
+
+        # Si el press aún está arrancando el recorder, esperar brevemente
+        if getattr(self, "_press_in_progress", False):
+            info("HOTKEY", "release — esperando que recorder termine de arrancar...")
+            import time as _t
+            for _ in range(20):  # hasta 2s
+                if not self._press_in_progress:
+                    break
+                _t.sleep(0.1)
+            info("HOTKEY", "recorder listo, procediendo con release")
+
         info("HOTKEY", "release — deteniendo recorder")
         try:
             audio, sr = self.recorder.stop()
