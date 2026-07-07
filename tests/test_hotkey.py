@@ -156,3 +156,34 @@ def test_listener_handle_press_enqueue_only():
     # pump lo despacha
     listener.pump(timeout=0.1)
     assert called == [True]
+
+
+def test_normalize_key_uppercase_with_shift():
+    """pynput reporta 'Z' mayúscula con shift; _normalize_key la pasa a minúscula."""
+    from pynput.keyboard import KeyCode
+    from belen.hotkey import _normalize_key
+
+    upper_z = KeyCode.from_char("Z")
+    lower_z = _normalize_key(upper_z)
+    assert lower_z.char == "z"
+
+    # sin shift, ya es minúscula, no cambia
+    plain_a = KeyCode.from_char("a")
+    assert _normalize_key(plain_a).char == "a"
+
+
+def test_handle_press_normalizes_uppercase_z():
+    """Shift+Z reporta 'Z' pero el spec tiene 'z' — debe matchear."""
+    listener = HotkeyListener(spec="shift+z", mode="push_to_talk")
+    pressed: list[bool] = []
+    listener.on_press(lambda: pressed.append(True))
+
+    from pynput.keyboard import Key, KeyCode
+    # simular: apretar shift, después Z (mayúscula por shift)
+    listener._handle_press(Key.shift)
+    listener._handle_press(KeyCode.from_char("Z"))  # mayúscula!
+
+    # debe haber encolado 'press' porque normaliza Z→z
+    assert listener._event_queue.qsize() == 1
+    listener.pump(timeout=0.1)
+    assert pressed == [True]

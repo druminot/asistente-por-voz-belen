@@ -107,7 +107,9 @@ class HotkeySpec:
             keys.append(_parse_token(token))
         if not keys:
             raise ValueError(f"Hotkey vacía: {spec!r}")
-        return cls(keys=tuple(keys))
+        # normalizar todos los KeyCode a minúsculas para matching consistente
+        normalized = tuple(_normalize_key(k) for k in keys)
+        return cls(keys=normalized)
 
     def __str__(self) -> str:
         return "+".join(_key_to_str(k) for k in self.keys)
@@ -120,6 +122,21 @@ def _key_to_str(key: Key | KeyCode) -> str:
     if isinstance(key, KeyCode):
         return key.char or "<unknown>"
     return str(key)
+
+
+def _normalize_key(key: Key | KeyCode) -> Key | KeyCode:
+    """Normaliza una tecla para comparación consistente.
+
+    pynput en macOS reporta 'Z' (mayúscula) cuando shift está apretado,
+    pero el spec se parsea como 'z' (minúscula). Esta función normaliza
+    KeyCode a minúsculas para que el matching funcione con modifiers.
+    """
+    if isinstance(key, KeyCode) and key.char:
+        # crear nuevo KeyCode con char minúscula
+        lower = key.char.lower()
+        if lower != key.char:
+            return KeyCode.from_char(lower)
+    return key
 
 
 class HotkeyListener:
@@ -262,7 +279,7 @@ class HotkeyListener:
             return
         try:
             with self._lock:
-                self._pressed_keys.add(key)
+                self._pressed_keys.add(_normalize_key(key))
                 matches = self._matches_locked()
 
                 if self._mode == HotkeyMode.PUSH_TO_TALK:
@@ -279,17 +296,18 @@ class HotkeyListener:
             self._event_queue.put("press")
         except Exception as e:
             self._last_error = f"handle_press: {e}"
-            print(f"[ERROR] hotkey _handle_press: {e}")
+            print(f"[ERROR] hotkey _handle_press: {e}", flush=True)
 
     def _handle_release(self, key: Key | KeyCode | None) -> None:
         """Callback de pynput. SOLO encola, NUNCA hace trabajo bloqueante."""
         if key is None:
             return
         try:
+            norm_key = _normalize_key(key)
             with self._lock:
-                self._pressed_keys.discard(key)
+                self._pressed_keys.discard(norm_key)
                 if self._mode == HotkeyMode.PUSH_TO_TALK:
-                    if key in self._spec.keys and self._is_active:
+                    if norm_key in self._spec.keys and self._is_active:
                         self._is_active = False
                     else:
                         return
@@ -302,7 +320,7 @@ class HotkeyListener:
             self._event_queue.put("release")
         except Exception as e:
             self._last_error = f"handle_release: {e}"
-            print(f"[ERROR] hotkey _handle_release: {e}")
+            print(f"[ERROR] hotkey _handle_release: {e}", flush=True)
 
     def _matches_locked(self) -> bool:
         """True si la combinación actual coincide con la spec. Requiere lock."""
