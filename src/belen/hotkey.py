@@ -212,6 +212,7 @@ class HotkeyListener:
 
     def start(self) -> None:
         """Arranca el listener (no-bloqueante, daemon thread)."""
+        from belen.logging_utils import info, debug
         if self._listener is not None:
             return
         from pynput.keyboard import Listener
@@ -226,12 +227,14 @@ class HotkeyListener:
             except queue.Empty:
                 break
 
+        info("HOTKEY", f"creando Listener spec={self._spec}")
         self._listener = Listener(
             on_press=self._handle_press,
             on_release=self._handle_release,
         )
         self._listener.daemon = True
         self._listener.start()
+        info("HOTKEY", "Listener thread arrancado")
 
     def stop(self) -> None:
         """Detiene el listener limpiamente."""
@@ -275,40 +278,49 @@ class HotkeyListener:
 
     def _handle_press(self, key: Key | KeyCode | None) -> None:
         """Callback de pynput. SOLO encola, NUNCA hace trabajo bloqueante."""
+        from belen.logging_utils import debug
         if key is None:
             return
         try:
+            norm = _normalize_key(key)
+            debug("HOTKEY", f"press {key!r} → norm {norm!r}")
             with self._lock:
-                self._pressed_keys.add(_normalize_key(key))
+                self._pressed_keys.add(norm)
                 matches = self._matches_locked()
 
                 if self._mode == HotkeyMode.PUSH_TO_TALK:
                     if matches and not self._is_active:
                         self._is_active = True
+                        debug("HOTKEY", f"match! encolando press (set={self._pressed_keys})")
                     else:
                         return
                 else:  # toggle
                     if matches and not self._is_active:
                         self._is_active = True
+                        debug("HOTKEY", f"match toggle! encolando press")
                     else:
                         return
 
             self._event_queue.put("press")
         except Exception as e:
             self._last_error = f"handle_press: {e}"
-            print(f"[ERROR] hotkey _handle_press: {e}", flush=True)
+            from belen.logging_utils import error
+            error("HOTKEY", f"_handle_press: {e}")
 
     def _handle_release(self, key: Key | KeyCode | None) -> None:
         """Callback de pynput. SOLO encola, NUNCA hace trabajo bloqueante."""
+        from belen.logging_utils import debug
         if key is None:
             return
         try:
             norm_key = _normalize_key(key)
+            debug("HOTKEY", f"release {key!r} → norm {norm_key!r}")
             with self._lock:
                 self._pressed_keys.discard(norm_key)
                 if self._mode == HotkeyMode.PUSH_TO_TALK:
                     if norm_key in self._spec.keys and self._is_active:
                         self._is_active = False
+                        debug("HOTKEY", f"release de tecla del spec! encolando release")
                     else:
                         return
                 else:  # toggle
@@ -320,7 +332,8 @@ class HotkeyListener:
             self._event_queue.put("release")
         except Exception as e:
             self._last_error = f"handle_release: {e}"
-            print(f"[ERROR] hotkey _handle_release: {e}", flush=True)
+            from belen.logging_utils import error
+            error("HOTKEY", f"_handle_release: {e}")
 
     def _matches_locked(self) -> bool:
         """True si la combinación actual coincide con la spec. Requiere lock."""

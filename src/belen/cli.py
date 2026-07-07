@@ -121,6 +121,11 @@ def start(
     from belen.ui import ConsoleUI, FloatingUI
     from belen.visual_ui import get_visual_ui
 
+    # Instalar hook global para capturar crashes en el log
+    from belen.logging_utils import install_excepthook, info
+    install_excepthook()
+    info("CLI", "belen start invocado")
+
     # Verificar permiso de Accesibilidad ANTES de arrancar.
     # Sin él, pynput no recibe eventos de teclado en macOS.
     if platform.system() == "Darwin":
