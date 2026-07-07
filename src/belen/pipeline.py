@@ -177,19 +177,32 @@ class BelenPipeline:
             self.recorder.cancel()
 
     def _handle_hotkey_press(self) -> None:
-        from belen.logging_utils import info
-        info("HOTKEY", "press — arrancando recorder (en thread aparte)")
-        # Lanzar recorder.start() en un thread aparte para no bloquear
-        # el pump thread (PortAudio puede tardar 1-2s en abrir el stream).
-        t = threading.Thread(
-            target=self._do_press,
-            name="belen-press",
-            daemon=True,
-        )
-        t.start()
+        from belen.logging_utils import info, debug
+        info("HOTKEY", "press — arrancando grabación")
+
+        # Si el stream es persistente (prewarmed), start() es instantáneo.
+        # Si no, se lanza en thread aparte para no bloquear el pump thread.
+        if self.recorder._prewarmed:
+            try:
+                self.recorder.start()
+                self.status.listening()
+                self._ui_listening()
+                info("HOTKEY", "recorder arrancado (prewarmed, instantáneo)")
+            except Exception as e:
+                from belen.logging_utils import error
+                error("HOTKEY", f"excepción en press (prewarmed): {e}")
+                self.status.error(str(e))
+                self._ui_error(str(e))
+        else:
+            t = threading.Thread(
+                target=self._do_press,
+                name="belen-press",
+                daemon=True,
+            )
+            t.start()
 
     def _do_press(self) -> None:
-        """Ejecuta el press en thread aparte."""
+        """Ejecuta el press en thread aparte (fallback sin prewarm)."""
         from belen.logging_utils import info, error
         try:
             self.recorder.start()
@@ -202,7 +215,6 @@ class BelenPipeline:
             self._ui_error(str(e))
 
     def _ui_listening(self) -> None:
-        """Pone la UI en estado listening (compatible con todos los tipos)."""
         if isinstance(self.ui, (FloatingUI, ConsoleUI)):
             self.ui.listening()
         elif hasattr(self.ui, "listening"):
@@ -233,7 +245,6 @@ class BelenPipeline:
             self.ui.idle()
 
     def _ui_show_user_text(self, text: str) -> None:
-        """Muestra el texto transcrito del usuario en la UI."""
         from belen.logging_utils import debug
         debug("UI", f"mostrando user_text: {text!r}")
         if hasattr(self.ui, "set_user_text"):
@@ -242,17 +253,22 @@ class BelenPipeline:
     def _handle_hotkey_release(self) -> None:
         from belen.logging_utils import debug, info, warn, error
 
-        # Si el recorder aún no arrancó (press en thread aparte), esperar
-        # a que is_recording sea True antes de detener.
+        # Si el recorder aún no arrancó, esperar con Event en vez de polling.
         if not self.recorder.is_recording:
             info("HOTKEY", "release — esperando que recorder arranque...")
+            ready = self.recorder.wait_ready(timeout=3.0)
+            if not ready:
+                warn("HOTKEY", "recorder nunca arrancó, descartando release")
+                return
+            # El event se seteó, pero puede que is_recording aún no sea True
+            # en el thread principal. Esperar un poco más.
             import time as _t
             waited = 0.0
-            while not self.recorder.is_recording and waited < 3.0:
-                _t.sleep(0.05)
-                waited += 0.05
+            while not self.recorder.is_recording and waited < 0.5:
+                _t.sleep(0.02)
+                waited += 0.02
             if not self.recorder.is_recording:
-                warn("HOTKEY", "recorder nunca arrancó, descartando release")
+                warn("HOTKEY", "recorder no grabando después de wait_ready, descartando")
                 return
             info("HOTKEY", f"recorder listo después de {waited:.2f}s")
 
@@ -262,6 +278,10 @@ class BelenPipeline:
         except Exception as e:
             error("HOTKEY", f"recorder.stop() falló: {e}")
             return
+
+        # Resetear el ready event para el próximo press
+        self.recorder._ready_event.clear()
+
         audio_samples = audio.size if hasattr(audio, "size") else 0
         duration_sec = audio_samples / sr if sr > 0 else 0
         debug("RECORDER", f"audio: {audio_samples} samples @ {sr}Hz ({duration_sec:.2f}s)")
@@ -274,9 +294,7 @@ class BelenPipeline:
             self._show_error("Muy corto. Mantené shift+z y hablá más tiempo.")
             return
 
-        # Lanzar process_turn en un thread separado para no bloquear
-        # el pump thread (que sigue despachando eventos de pynput).
-        if self._processing:
+        if self._is_processing:
             warn("PIPELINE", "turno anterior aún procesando, descartando")
             self._show_error("Estoy pensando... esperá un momento")
             return
@@ -291,7 +309,6 @@ class BelenPipeline:
         info("PIPELINE", f"thread de turno arrancado (tid={t.ident})")
 
     def _show_error(self, msg: str) -> None:
-        """Muestra un error en la UI y vuelve a idle."""
         from belen.logging_utils import info
         info("UI", f"mostrando error: {msg}")
         self.status.error(msg)
@@ -300,10 +317,6 @@ class BelenPipeline:
         time.sleep(1.5)
         self.status.idle()
         self._ui_idle()
-
-    @property
-    def _processing(self) -> bool:
-        return getattr(self, "_is_processing", False)
 
     def _process_turn_threaded(self, audio: Any, sample_rate: int) -> None:
         """Wrapper de process_turn que marca el flag de processing."""
@@ -337,7 +350,6 @@ class BelenPipeline:
 
             if not user_text:
                 warn("STT", "transcripción vacía, descartando turno")
-                # Mostrar feedback en la UI
                 self._ui_error("No te entendí. Probá de nuevo.")
                 import time as _t
                 _t.sleep(1.5)
@@ -353,7 +365,6 @@ class BelenPipeline:
 
             print(f"\n[👤 Usuario]: {user_text}")
 
-            # Mostrar el texto transcrito en la UI inmediatamente
             self._ui_show_user_text(user_text)
 
             info("SELECTOR", f"buscando match de proyecto...")

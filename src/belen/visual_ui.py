@@ -243,7 +243,7 @@ class SiriStyleWindow:
         self._hint_label.setTextColor_(NSColor.colorWithCalibratedWhite_alpha_(0.6, 1.0))
         self._hint_label.setAlignment_(2)
         self._hint_label.setFont_(NSFont.systemFontOfSize_(10))
-        self._hint_label.setStringValue_("⌥ + Z + ,   o decí 'Belen'")
+        self._hint_label.setStringValue_("⇧ + Z   o decí 'Belen'")
         container.addSubview_(self._hint_label)
 
         # Texto del usuario (lo que dijiste)
