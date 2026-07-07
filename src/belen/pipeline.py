@@ -177,11 +177,18 @@ class BelenPipeline:
             self.recorder.cancel()
 
     def _handle_hotkey_press(self) -> None:
-        from belen.logging_utils import info, debug
+        from belen.logging_utils import info, warn
+
+        # Si ya estamos grabando o procesando, ignorar el press
+        if self.recorder.is_recording:
+            warn("HOTKEY", "press ignorado — ya grabando")
+            return
+        if self._is_processing:
+            warn("HOTKEY", "press ignorado — procesando turno anterior")
+            return
+
         info("HOTKEY", "press — arrancando grabación")
 
-        # Si el stream es persistente (prewarmed), start() es instantáneo.
-        # Si no, se lanza en thread aparte para no bloquear el pump thread.
         if self.recorder._prewarmed:
             try:
                 self.recorder.start()
@@ -253,24 +260,14 @@ class BelenPipeline:
     def _handle_hotkey_release(self) -> None:
         from belen.logging_utils import debug, info, warn, error
 
-        # Si el recorder aún no arrancó, esperar con Event en vez de polling.
+        # Si ya no estamos grabando (otro release ya procesó), ignorar
         if not self.recorder.is_recording:
-            info("HOTKEY", "release — esperando que recorder arranque...")
-            ready = self.recorder.wait_ready(timeout=3.0)
-            if not ready:
-                warn("HOTKEY", "recorder nunca arrancó, descartando release")
+            # Puede ser que el press no completó aún — esperar un poco
+            ready = self.recorder.wait_ready(timeout=1.0)
+            if not ready or not self.recorder.is_recording:
+                warn("HOTKEY", "release ignorado — no está grabando")
                 return
-            # El event se seteó, pero puede que is_recording aún no sea True
-            # en el thread principal. Esperar un poco más.
-            import time as _t
-            waited = 0.0
-            while not self.recorder.is_recording and waited < 0.5:
-                _t.sleep(0.02)
-                waited += 0.02
-            if not self.recorder.is_recording:
-                warn("HOTKEY", "recorder no grabando después de wait_ready, descartando")
-                return
-            info("HOTKEY", f"recorder listo después de {waited:.2f}s")
+            info("HOTKEY", f"recorder listo después de esperar")
 
         info("HOTKEY", "release — deteniendo recorder")
         try:
@@ -279,12 +276,11 @@ class BelenPipeline:
             error("HOTKEY", f"recorder.stop() falló: {e}")
             return
 
-        # Resetear el ready event para el próximo press
-        self.recorder._ready_event.clear()
-
         audio_samples = audio.size if hasattr(audio, "size") else 0
         duration_sec = audio_samples / sr if sr > 0 else 0
-        debug("RECORDER", f"audio: {audio_samples} samples @ {sr}Hz ({duration_sec:.2f}s)")
+        import numpy as np
+        rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2))) if audio_samples > 0 else 0
+        debug("RECORDER", f"audio: {audio_samples} samples @ {sr}Hz ({duration_sec:.2f}s) RMS={rms:.0f}")
         if audio_samples == 0:
             warn("RECORDER", "audio vacío, volviendo a idle")
             self._show_error("No se escuchó nada. ¿Permisos de micrófono?")

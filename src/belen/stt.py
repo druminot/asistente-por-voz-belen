@@ -44,7 +44,7 @@ def audio_to_wav_bytes(audio: np.ndarray, sample_rate: int) -> bytes:
     return buf.getvalue()
 
 
-def detect_silence(audio: np.ndarray, threshold: int = 500, min_silence_ms: int = 300) -> bool:
+def detect_silence(audio: np.ndarray, threshold: int = 100, min_silence_ms: int = 300) -> bool:
     """Detecta si el audio es esencialmente silencio.
 
     threshold: amplitud máxima considerada silencio (int16, 0-32767)
