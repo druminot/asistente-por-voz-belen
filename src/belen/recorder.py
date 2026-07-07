@@ -38,7 +38,14 @@ class AudioRecorder:
     ) -> None:
         settings = get_settings()
         self._sample_rate = sample_rate or settings.belen_sample_rate
-        self._device = device if device is not None else (settings.belen_input_device or None)
+        # Forzar dispositivo 0 (Micrófono de MacBook Pro) si no se especifica
+        # porque el default del sistema puede no funcionar cuando corre como NSApp.
+        if device is not None:
+            self._device = device
+        elif settings.belen_input_device:
+            self._device = settings.belen_input_device
+        else:
+            self._device = 0  # forzar el primer dispositivo de entrada
         self._channels = channels
         self._chunks: list[np.ndarray] = []
         self._stream = None

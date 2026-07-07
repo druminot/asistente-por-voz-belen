@@ -17,7 +17,7 @@ def test_default_settings():
     assert s.belen_wakeword_enabled is True
     assert s.belen_wakeword == "belen"
     assert s.belen_stt_engine == STTEngine.FASTER_WHISPER
-    assert s.belen_tts_engine == TTSEngine.VIBEVOICE_REALTIME
+    assert s.belen_tts_engine == TTSEngine.MACOS_SAY
     assert s.belen_sample_rate == 16000
     assert s.belen_stt_lang == "es"
     assert s.belen_floating_ui is True

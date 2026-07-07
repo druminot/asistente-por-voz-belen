@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     belen_stt_lang: str = Field(default="es", alias="BELEN_STT_LANG")
     belen_whisper_model: str = Field(default="base", alias="BELEN_WHISPER_MODEL")
 
-    belen_tts_engine: TTSEngine = Field(default=TTSEngine.VIBEVOICE_REALTIME, alias="BELEN_TTS_ENGINE")
-    belen_tts_voice: str = Field(default="es_female", alias="BELEN_TTS_VOICE")
+    belen_tts_engine: TTSEngine = Field(default=TTSEngine.MACOS_SAY, alias="BELEN_TTS_ENGINE")
+    belen_tts_voice: str = Field(default="Mónica", alias="BELEN_TTS_VOICE")
 
     belen_projects_dir: Path = Field(
         default=Path.home() / "Documents" / "Codigos Varios",
