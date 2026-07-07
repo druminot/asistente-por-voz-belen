@@ -319,6 +319,23 @@ class SiriStyleWindow:
         if self._state_label is not None:
             self._state_label.setStringValue_(STATE_LABELS[state])
 
+    def set_user_text(self, text: str) -> None:
+        """Muestra el texto del usuario en la ventana (sin cambiar estado)."""
+        with self._lock:
+            self._user_text = text
+        if self._app is None:
+            return
+        from PyObjCTools import AppHelper
+
+        def _on_main() -> None:
+            if self._user_text_field is not None:
+                self._user_text_field.setStringValue_(text[:60])
+
+        try:
+            AppHelper.callAfter(_on_main)
+        except Exception:
+            pass
+
     def update(self, state: UIState, message: str = "") -> None:
         """Actualiza el estado desde cualquier thread."""
         with self._lock:

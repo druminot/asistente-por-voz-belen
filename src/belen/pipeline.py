@@ -172,33 +172,76 @@ class BelenPipeline:
         try:
             self.recorder.start()
             self.status.listening()
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.listening()
+            self._ui_listening()
             info("HOTKEY", "recorder arrancado, UI en LISTENING")
         except Exception as e:
             from belen.logging_utils import error
             error("HOTKEY", f"excepción en press: {e}")
             self.status.error(str(e))
 
+    def _ui_listening(self) -> None:
+        """Pone la UI en estado listening (compatible con todos los tipos)."""
+        if isinstance(self.ui, (FloatingUI, ConsoleUI)):
+            self.ui.listening()
+        elif hasattr(self.ui, "listening"):
+            self.ui.listening()
+
+    def _ui_processing(self, msg: str) -> None:
+        if isinstance(self.ui, (FloatingUI, ConsoleUI)):
+            self.ui.processing(msg)
+        elif hasattr(self.ui, "processing"):
+            self.ui.processing(msg)
+
+    def _ui_speaking(self, msg: str) -> None:
+        if isinstance(self.ui, (FloatingUI, ConsoleUI)):
+            self.ui.speaking(msg)
+        elif hasattr(self.ui, "speaking"):
+            self.ui.speaking(msg)
+
+    def _ui_error(self, msg: str) -> None:
+        if isinstance(self.ui, (FloatingUI, ConsoleUI)):
+            self.ui.error(msg)
+        elif hasattr(self.ui, "error"):
+            self.ui.error(msg)
+
+    def _ui_idle(self) -> None:
+        if isinstance(self.ui, (FloatingUI, ConsoleUI)):
+            self.ui.idle()
+        elif hasattr(self.ui, "idle"):
+            self.ui.idle()
+
+    def _ui_show_user_text(self, text: str) -> None:
+        """Muestra el texto transcrito del usuario en la UI."""
+        from belen.logging_utils import debug
+        debug("UI", f"mostrando user_text: {text!r}")
+        if hasattr(self.ui, "set_user_text"):
+            self.ui.set_user_text(text)
+
     def _handle_hotkey_release(self) -> None:
-        from belen.logging_utils import debug, info, warn
+        from belen.logging_utils import debug, info, warn, error
         info("HOTKEY", "release — deteniendo recorder")
         try:
             audio, sr = self.recorder.stop()
         except Exception as e:
             error("HOTKEY", f"recorder.stop() falló: {e}")
             return
-        debug("RECORDER", f"audio capturado: {audio.size if hasattr(audio,'size') else 0} samples @ {sr}Hz")
-        if audio.size == 0:
+        audio_samples = audio.size if hasattr(audio, "size") else 0
+        duration_sec = audio_samples / sr if sr > 0 else 0
+        debug("RECORDER", f"audio: {audio_samples} samples @ {sr}Hz ({duration_sec:.2f}s)")
+        if audio_samples == 0:
             warn("RECORDER", "audio vacío, volviendo a idle")
-            self.status.idle()
+            self._show_error("No se escuchó nada. ¿Permisos de micrófono?")
+            return
+        if duration_sec < 0.3:
+            warn("RECORDER", f"audio muy corto ({duration_sec:.2f}s), descartando")
+            self._show_error("Muy corto. Mantené shift+z y hablá más tiempo.")
             return
 
         # Lanzar process_turn en un thread separado para no bloquear
         # el pump thread (que sigue despachando eventos de pynput).
         if self._processing:
-            from belen.logging_utils import warn as _w
-            _w("PIPELINE", "turno anterior aún procesando, descartando")
+            warn("PIPELINE", "turno anterior aún procesando, descartando")
+            self._show_error("Esperando turno anterior...")
             return
 
         t = threading.Thread(
@@ -209,6 +252,17 @@ class BelenPipeline:
         )
         t.start()
         info("PIPELINE", f"thread de turno arrancado (tid={t.ident})")
+
+    def _show_error(self, msg: str) -> None:
+        """Muestra un error en la UI y vuelve a idle."""
+        from belen.logging_utils import info
+        info("UI", f"mostrando error: {msg}")
+        self.status.error(msg)
+        self._ui_error(msg)
+        import time
+        time.sleep(1.5)
+        self.status.idle()
+        self._ui_idle()
 
     @property
     def _processing(self) -> bool:
@@ -238,8 +292,7 @@ class BelenPipeline:
         try:
             info("STT", "transcribiendo audio...")
             self.status.processing("transcribiendo...")
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.processing("transcribiendo...")
+            self._ui_processing("transcribiendo...")
 
             t_stt = time.monotonic()
             user_text = self.stt.transcribe(audio, sample_rate)
@@ -247,6 +300,11 @@ class BelenPipeline:
 
             if not user_text:
                 warn("STT", "transcripción vacía, descartando turno")
+                # Mostrar feedback en la UI
+                self._ui_error("No te entendí. Probá de nuevo.")
+                import time as _t
+                _t.sleep(1.5)
+                self._ui_idle()
                 result = TurnResult(
                     user_text="",
                     belen_text="",
@@ -258,6 +316,9 @@ class BelenPipeline:
 
             print(f"\n[👤 Usuario]: {user_text}")
 
+            # Mostrar el texto transcrito en la UI inmediatamente
+            self._ui_show_user_text(user_text)
+
             info("SELECTOR", f"buscando match de proyecto...")
             match = self.project_selector.select(user_text)
             if match is not None:
@@ -267,8 +328,7 @@ class BelenPipeline:
                 print(f"[📁 Proyecto]: {match.name} → {match.path}")
 
                 self.status.speaking(belen_text)
-                if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                    self.ui.speaking(belen_text)
+                self._ui_speaking(belen_text)
                 self.tts.speak(belen_text)
 
                 result = TurnResult(
@@ -286,8 +346,7 @@ class BelenPipeline:
                 warn("SAFETY", f"prompt bloqueado: {validation.reason}")
                 belen_text = f"No puedo hacer eso: {validation.reason}"
                 self.status.error(belen_text)
-                if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                    self.ui.error(belen_text)
+                self._ui_error(belen_text)
                 self.tts.speak(belen_text)
                 result = TurnResult(
                     user_text=user_text,
@@ -300,8 +359,7 @@ class BelenPipeline:
                 return result
 
             self.status.processing("pensando...")
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.processing("pensando...")
+            self._ui_processing("pensando...")
 
             info("BRAIN", f"enviando a opencode (cwd={self._active_project})...")
             t_brain = time.monotonic()
@@ -318,14 +376,12 @@ class BelenPipeline:
             info("TTS", f"reproduciendo respuesta ({len(belen_text)} chars)...")
             t_tts = time.monotonic()
             self.status.speaking(belen_text)
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.speaking(belen_text)
+            self._ui_speaking(belen_text)
             self.tts.speak(belen_text)
             info("TTS", f"TTS terminó en {time.monotonic()-t_tts:.2f}s")
 
             self.status.idle()
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.idle()
+            self._ui_idle()
 
             result = TurnResult(
                 user_text=user_text,
@@ -343,8 +399,7 @@ class BelenPipeline:
             _err("PIPELINE", traceback.format_exc())
             error_msg = f"Error: {e}"
             self.status.error(error_msg)
-            if isinstance(self.ui, (FloatingUI, ConsoleUI)):
-                self.ui.error(error_msg)
+            self._ui_error(error_msg)
             result = TurnResult(
                 user_text="",
                 belen_text="",
