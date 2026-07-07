@@ -80,3 +80,79 @@ def test_listener_callbacks_set():
 
     assert listener._on_press_cb is not None
     assert listener._on_release_cb is not None
+
+
+def test_listener_pump_dispatches_press():
+    """pump() despacha eventos 'press' de la queue a los callbacks."""
+    listener = HotkeyListener(spec="shift+z")
+    pressed: list[bool] = []
+    released: list[bool] = []
+    listener.on_press(lambda: pressed.append(True))
+    listener.on_release(lambda: released.append(True))
+
+    # inyectar un evento "press" directamente en la queue
+    listener._event_queue.put("press")
+    listener.pump(timeout=0.1)
+
+    assert pressed == [True]
+    assert released == []
+
+
+def test_listener_pump_dispatches_release():
+    """pump() despacha eventos 'release' de la queue a los callbacks."""
+    listener = HotkeyListener(spec="shift+z")
+    pressed: list[bool] = []
+    released: list[bool] = []
+    listener.on_press(lambda: pressed.append(True))
+    listener.on_release(lambda: released.append(True))
+
+    listener._event_queue.put("release")
+    listener.pump(timeout=0.1)
+
+    assert released == [True]
+    assert pressed == []
+
+
+def test_listener_pump_timeout_no_events():
+    """pump() con queue vacía retorna sin llamar callbacks."""
+    listener = HotkeyListener(spec="shift+z")
+    pressed: list[bool] = []
+    listener.on_press(lambda: pressed.append(True))
+
+    listener.pump(timeout=0.01)
+    assert pressed == []
+
+
+def test_listener_pump_swallows_callback_exception():
+    """Si el callback lanza, pump() captura y no rompe el loop."""
+    listener = HotkeyListener(spec="shift+z")
+
+    def boom() -> None:
+        raise RuntimeError("callback explotó")
+
+    listener.on_press(boom)
+    listener._event_queue.put("press")
+    # no debe propagar la excepción
+    listener.pump(timeout=0.1)
+    assert listener.last_error is not None
+    assert "on_press callback" in listener.last_error
+
+
+def test_listener_handle_press_enqueue_only():
+    """_handle_press solo encola, no llama al callback directamente."""
+    listener = HotkeyListener(spec="shift+z", mode="push_to_talk")
+    called: list[bool] = []
+    listener.on_press(lambda: called.append(True))
+
+    from pynput.keyboard import Key, KeyCode
+    listener._handle_press(Key.shift)
+    assert listener._event_queue.qsize() <= 1  # shift solo no dispara
+    assert called == []  # callback no llamado aún
+
+    listener._handle_press(KeyCode.from_char("z"))
+    assert listener._event_queue.qsize() == 1
+    assert called == []  # aún no se despacha
+
+    # pump lo despacha
+    listener.pump(timeout=0.1)
+    assert called == [True]

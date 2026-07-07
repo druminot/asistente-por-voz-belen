@@ -153,3 +153,35 @@ def test_pipeline_set_active_project():
     assert pipeline.active_project is None
     pipeline.set_active_project(Path("/tmp/foo"))
     assert pipeline.active_project == Path("/tmp/foo")
+
+
+def test_pipeline_pump_thread_starts_and_stops():
+    """El pipeline arranca un pump thread que no bloquea stop()."""
+    import time as _time
+    pipeline, _ = _make_pipeline()
+    # instanciar hotkey listener mockeado
+    class _MockHotkey:
+        def __init__(self):
+            self._pumped = False
+        def on_press(self, cb): pass
+        def on_release(self, cb): pass
+        def start(self): pass
+        def stop(self): pass
+        def pump(self, timeout=0.05):
+            self._pumped = True
+    pipeline._hotkey_listener = _MockHotkey()
+    pipeline._is_running = True
+
+    import threading
+    pump_thread = threading.Thread(
+        target=pipeline._pump_loop,
+        name="test-pump",
+        daemon=True,
+    )
+    pump_thread.start()
+    _time.sleep(0.1)
+    assert pipeline._hotkey_listener._pumped, "pump() nunca fue llamado"
+
+    pipeline._is_running = False
+    pump_thread.join(timeout=2.0)
+    assert not pump_thread.is_alive(), "pump thread no terminó al hacer stop"

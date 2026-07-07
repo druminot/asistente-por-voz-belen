@@ -121,6 +121,27 @@ def start(
     from belen.ui import ConsoleUI, FloatingUI
     from belen.visual_ui import get_visual_ui
 
+    # Verificar permiso de Accesibilidad ANTES de arrancar.
+    # Sin él, pynput no recibe eventos de teclado en macOS.
+    if platform.system() == "Darwin":
+        from belen.permissions import check_accessibility
+        if not check_accessibility(prompt=True):
+            console.print()
+            console.print(Panel(
+                "[bold red]✗ Falta permiso de Accesibilidad[/bold red]\n\n"
+                "pynput necesita Accesibilidad para detectar la hotkey.\n\n"
+                "[bold]Hacé esto:[/bold]\n"
+                "1. System Settings → Privacy & Security → Accessibility\n"
+                "2. Activá el switch al lado de Terminal (o iTerm)\n"
+                "3. [bold]Reiniciá la Terminal[/bold] (Cmd+Q y volver a abrir)\n"
+                "4. Volvé a correr [cyan]belen start[/cyan]\n\n"
+                "Si ya lo activaste y no funciona, es porque hay que reiniciar\n"
+                "el proceso de Terminal para que el cambio surta efecto.",
+                title="⚠ Permiso requerido",
+                border_style="red",
+            ))
+            raise typer.Exit(1)
+
     pipeline = BelenPipeline()
     if project is not None:
         pipeline.set_active_project(project)

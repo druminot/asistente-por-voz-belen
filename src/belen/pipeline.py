@@ -72,6 +72,7 @@ class BelenPipeline:
         self._active_project: Path | None = None
         self._lock = threading.Lock()
         self._on_turn: Callable[[TurnResult], None] | None = None
+        self._pump_thread: threading.Thread | None = None
 
         if self.settings.belen_default_project:
             default = Path(self.settings.belen_default_project)
@@ -103,7 +104,7 @@ class BelenPipeline:
             print(f"[WARN] Callback on_turn falló: {e}")
 
     def start(self) -> None:
-        """Arranca el pipeline: hotkey listener + wakeword."""
+        """Arranca el pipeline: hotkey listener + wakeword + pump thread."""
         if self._is_running:
             return
         self._is_running = True
@@ -119,6 +120,21 @@ class BelenPipeline:
         self._hotkey_listener.on_release(self._handle_hotkey_release)
         self._hotkey_listener.start()
 
+        # Thread dedicado para despachar eventos de la queue de pynput.
+        # Esto evita que el callback nativo de pynput se congele con
+        # trabajo bloqueante (recorder.start, process_turn, etc.).
+        self._pump_thread = threading.Thread(
+            target=self._pump_loop,
+            name="belen-hotkey-pump",
+            daemon=True,
+        )
+        self._pump_thread.start()
+
+    def _pump_loop(self) -> None:
+        """Loop dedicado a despachar eventos de pynput en un thread propio."""
+        while self._is_running and self._hotkey_listener is not None:
+            self._hotkey_listener.pump(timeout=0.05)
+
     def start_hotkey_only(self) -> None:
         """Arranca solo el listener de hotkey (sin tocar UI)."""
         self.start()
@@ -129,6 +145,9 @@ class BelenPipeline:
         self._is_running = False
         if self._hotkey_listener is not None:
             self._hotkey_listener.stop()
+        if self._pump_thread is not None:
+            self._pump_thread.join(timeout=2.0)
+            self._pump_thread = None
         if self.recorder.is_recording:
             self.recorder.cancel()
 

@@ -18,6 +18,59 @@ import subprocess
 import sys
 
 
+def check_accessibility(prompt: bool = False) -> bool:
+    """Verifica si el proceso tiene permiso de Accesibilidad en macOS.
+
+    Usa ApplicationServices.AXIsProcessTrustedWithOptions. Si prompt=True,
+    abre el diálogo de System Settings pidiendo al usuario que habilite.
+
+    Returns:
+        True si el permiso ya está concedido.
+    """
+    if platform.system() != "Darwin":
+        return True
+    try:
+        import ApplicationServices
+        from CoreFoundation import (
+            CFDictionaryCreate,
+            kCFBooleanFalse,
+            kCFBooleanTrue,
+        )
+
+        ax_func = getattr(ApplicationServices, "AXIsProcessTrustedWithOptions", None)
+        if ax_func is None:
+            ax_trusted = getattr(ApplicationServices, "AXIsProcessTrusted", None)
+            if ax_trusted is not None:
+                return bool(ax_trusted())
+            return True  # no podemos verificar
+
+        key = ApplicationServices.kAXTrustedCheckOptionPrompt
+        value = kCFBooleanTrue if prompt else kCFBooleanFalse
+        options = CFDictionaryCreate(
+            None,
+            [key],
+            [value],
+            1,
+            None,
+            None,
+        )
+        return bool(ax_func(options))
+    except ImportError:
+        try:
+            import ApplicationServices
+            ax_trusted = getattr(ApplicationServices, "AXIsProcessTrusted", None)
+            if ax_trusted is not None:
+                return bool(ax_trusted())
+            print("[WARN] No se pudo verificar permiso de Accesibilidad.")
+            return True
+        except ImportError:
+            print("[WARN] No se pudo verificar permiso de Accesibilidad.")
+            return True
+    except Exception as e:
+        print(f"[WARN] Error verificando accesibilidad: {e}")
+        return True
+
+
 def check_microphone_permission() -> bool:
     """Devuelve True si el proceso actual tiene permiso de mic."""
     if platform.system() != "Darwin":
@@ -96,6 +149,22 @@ def open_accessibility_settings() -> None:
             print(f"[WARN] No se pudo abrir settings: {e}")
 
 
+def preload_whisper_model() -> None:
+    """Pre-descarga el modelo de faster-whisper para que el primer uso sea instantáneo."""
+    try:
+        from belen.config import get_settings
+        model_name = get_settings().belen_whisper_model
+        print(f"  Descargando modelo '{model_name}' (~74 MB)...")
+        from faster_whisper import WhisperModel
+        WhisperModel(model_name, device="cpu", compute_type="int8")
+        print("  ✓ Modelo descargado y cargado.")
+    except ImportError:
+        print("  [WARN] faster-whisper no instalado. Salteando pre-descarga.")
+    except Exception as e:
+        print(f"  [WARN] No se pudo pre-descargar el modelo: {e}")
+        print("  (Se descargará automáticamente en el primer uso.)")
+
+
 def request_permissions() -> None:
     """Pide los permisos necesarios al usuario."""
     if platform.system() != "Darwin":
@@ -140,6 +209,18 @@ def request_permissions() -> None:
         print("  ✓ Micrófono accesible")
     else:
         print("  ✗ No se pudo acceder al mic. Reintentá.")
+
+    print()
+    print("▶ Verificando Accesibilidad...")
+    if check_accessibility():
+        print("  ✓ Accesibilidad concedida")
+    else:
+        print("  ✗ Accesibilidad NO concedida. La hotkey no funcionará.")
+        print("    Activá el switch en System Settings → Accessibility → Terminal.")
+
+    print()
+    print("▶ Pre-descargando modelo de faster-whisper (74 MB)...")
+    preload_whisper_model()
 
     print()
     print("╭───────────────────────────────────────────────╮")
