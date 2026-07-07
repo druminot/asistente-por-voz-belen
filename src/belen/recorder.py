@@ -53,6 +53,41 @@ class AudioRecorder:
         self._lock = threading.Lock()
         self._duration_seconds: float = 0.0
         self._start_time: float = 0.0
+        # Stream persistente (precalentado) para evitar 1.8s de latency
+        self._persistent_stream: object | None = None
+        self._prewarmed: bool = False
+
+    def prewarm(self) -> None:
+        """Abre un stream de audio persistente para evitar la latencia
+        de 1-2s al abrir PortAudio en cada press de hotkey.
+
+        Llamar al inicio del pipeline para que el primer press sea instantáneo.
+        """
+        if self._prewarmed:
+            return
+        import sounddevice as sd
+
+        def _callback(indata: np.ndarray, frames: int, time_info: object, status: object) -> None:
+            if status:
+                return
+            # solo acumular chunks si estamos grabando
+            if self._is_recording:
+                self._chunks.append(indata.copy())
+
+        try:
+            self._persistent_stream = sd.InputStream(
+                samplerate=self._sample_rate,
+                channels=self._channels,
+                dtype="int16",
+                device=self._device,
+                callback=_callback,
+            )
+            self._persistent_stream.start()
+            self._prewarmed = True
+        except Exception as e:
+            from belen.logging_utils import warn
+            warn("RECORDER", f"prewarm falló: {e}. Se abrirá stream por press.")
+            self._persistent_stream = None
 
     @property
     def sample_rate(self) -> int:
@@ -72,18 +107,24 @@ class AudioRecorder:
         return time.monotonic() - self._start_time
 
     def start(self) -> None:
-        """Arranca la grabación (no-bloqueante)."""
+        """Arranca la grabación (instantáneo si el stream está precalentado)."""
         if self._is_recording:
             return
-        import sounddevice as sd
+        import time
 
         with self._lock:
             self._chunks = []
-            self._is_recording = True
-
-        import time
 
         self._start_time = time.monotonic()
+
+        if self._prewarmed and self._persistent_stream is not None:
+            # Stream ya abierto — solo activar la grabación (instantáneo)
+            with self._lock:
+                self._is_recording = True
+            return
+
+        # Fallback: abrir stream nuevo (puede tardar 1-2s)
+        import sounddevice as sd
 
         def callback(indata: np.ndarray, frames: int, time_info: object, status: object) -> None:
             if status:
@@ -99,6 +140,8 @@ class AudioRecorder:
                 callback=callback,
             )
             self._stream.start()
+            with self._lock:
+                self._is_recording = True
         except Exception as e:
             with self._lock:
                 self._is_recording = False

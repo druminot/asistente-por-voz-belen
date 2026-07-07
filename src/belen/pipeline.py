@@ -116,6 +116,15 @@ class BelenPipeline:
         self._is_running = True
         info("PIPELINE", f"spec hotkey: {self.settings.belen_hotkey} mode={self.settings.belen_hotkey_mode}")
 
+        # Precalentar el stream del micrófono para que el primer
+        # press de hotkey sea instantáneo (evita 1-2s de latency).
+        info("RECORDER", "precalentando stream de micrófono...")
+        try:
+            self.recorder.prewarm()
+            info("RECORDER", "stream precalentado OK")
+        except Exception as e:
+            warn("RECORDER", f"prewarm falló: {e}")
+
         if self.wakeword.config.enabled:
             try:
                 self.wakeword.load()
